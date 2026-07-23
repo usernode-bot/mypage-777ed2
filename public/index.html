@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
   <script>
   // usernode-dev-console@1
   (function () {
@@ -64,59 +64,212 @@
   })();
   </script>
   <title>MyPage</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%237c3aed'/><circle cx='50' cy='50' r='18' fill='white'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FAF6EE'/><text x='50' y='68' font-size='52' text-anchor='middle'>✨</text></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config = { darkMode: 'class' }</script>
-</head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col items-center justify-center gap-8 p-4">
-  <h1 class="text-2xl font-bold">MyPage</h1>
+  <script>tailwind.config = { darkMode: 'class', future: { hoverOnlyWhenSupported: true } }</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=Inter:wght@400;500;600;700;800&family=Comic+Neue:wght@400;700&family=Caveat:wght@500;700&family=Special+Elite&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://social-vibecoding.usernodelabs.org/usernode-native/v1/native.css">
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-native/v1/native.js"></script>
+  <style>
+    /* Series brand: paper/ink/brass, rose accent. The chrome stays quiet
+       because the user pages are loud — the editor is a neutral workshop. */
+    :root {
+      --paper: #FAF6EE; --paper-deep: #F3EDDF; --ink: #1F2B47;
+      --ink-soft: #5A6378; --line: #E7DFCC;
+      --accent: #D65A9E; --accent-deep: #B03A7C;
+      --un-accent: #D65A9E;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; }
 
-  <button id="press-btn" class="w-32 h-32 rounded-full bg-violet-600 hover:bg-violet-500 active:scale-95 transition-all text-white text-xl font-bold shadow-lg shadow-violet-600/30">
-    Press!
-  </button>
+    .mp-muted { color: var(--ink-soft); }
+    .mp-kicker { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-deep); font-weight: 700; }
+    .mp-wordmark { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 30px; margin: 2px 0 0; line-height: 1.05; }
 
-  <div id="count" class="text-lg text-zinc-400">0 total presses</div>
+    .mp-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: var(--ink); color: var(--paper); font-weight: 700; font-size: 14px;
+      border-radius: 12px; padding: 10px 16px;
+    }
+    .mp-btn-accent { background: var(--accent); color: #fff; }
+    .mp-btn-danger { background: #C0392B; color: #fff; }
+    .mp-btn-sm { padding: 7px 13px; font-size: 13px; border-radius: 10px; }
+    .mp-iconbtn { font-size: 20px; padding: 6px 10px; border-radius: 10px; color: var(--ink); }
 
-  <div class="w-full max-w-sm">
-    <h2 class="text-sm font-medium text-zinc-500 mb-2 text-center">Leaderboard</h2>
-    <div id="leaderboard" class="space-y-1"></div>
-  </div>
+    /* ------------------------------------------------------------- home */
+    .mp-home-header {
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+      padding: calc(18px + env(safe-area-inset-top)) 18px 14px;
+      border-bottom: 2.5px solid var(--ink);
+      max-width: 720px; margin: 0 auto;
+    }
+    .mp-home { max-width: 720px; margin: 0 auto; padding: 14px 18px calc(40px + env(safe-area-inset-bottom)); }
+    .mp-sect-label { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; margin: 8px 2px 8px; }
+    .mp-card-list { display: flex; flex-direction: column; gap: 10px; }
+    .mp-card {
+      display: block; width: 100%; text-align: left;
+      background: #fff; border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px 16px; box-shadow: 0 1px 0 rgba(31,43,71,.04);
+    }
+    .mp-card-row1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .mp-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 17.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mp-card-row2 { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .mp-status-pub { color: #4D7325; font-weight: 600; }
+    .mp-status-draft { color: var(--accent-deep); font-weight: 600; }
+    .mp-badge { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 9px; }
+    .mp-chip {
+      display: inline-flex; align-items: center; gap: 4px; flex: none;
+      font-size: 12px; font-weight: 600; color: var(--ink-soft);
+      background: var(--paper-deep); border-radius: 99px; padding: 4px 11px; white-space: nowrap;
+    }
+    .mp-empty { text-align: center; padding: 56px 20px; max-width: 380px; margin: 0 auto; }
+    .mp-empty-art { font-size: 34px; margin-bottom: 12px; }
 
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token') || '';
-    const headers = token ? { 'x-usernode-token': token } : {};
-
-    async function loadLeaderboard() {
-      const res = await fetch('/api/leaderboard', { headers });
-      if (!res.ok) return;
-      const { leaderboard } = await res.json();
-      const el = document.getElementById('leaderboard');
-      if (!leaderboard.length) {
-        el.innerHTML = '<p class="text-center text-zinc-600 text-sm">No presses yet</p>';
-        return;
-      }
-      el.innerHTML = leaderboard.map((r, i) =>
-        '<div class="flex justify-between px-3 py-1 rounded ' + (i === 0 ? 'bg-violet-600/20 text-violet-300' : 'text-zinc-400') + '">' +
-        '<span>' + (i + 1) + '. ' + r.username + '</span>' +
-        '<span class="font-mono">' + r.presses + '</span></div>'
-      ).join('');
-      const total = leaderboard.reduce((s, r) => s + parseInt(r.presses), 0);
-      document.getElementById('count').textContent = total + ' total presses';
+    /* ------------------------------------------------------------ modal */
+    .mp-backdrop {
+      position: fixed; inset: 0; background: rgba(31,43,71,.45); z-index: 70;
+      display: grid; place-items: center; padding: 18px;
+    }
+    .mp-modal {
+      background: #FFFDF8; border-radius: 18px; width: 100%; max-width: 420px;
+      max-height: 84vh; overflow: auto; padding: 20px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.25);
+    }
+    .mp-modal-title { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 20px; margin: 0 0 12px; }
+    .mp-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .mp-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; margin: 12px 0 6px; }
+    .mp-input {
+      width: 100%; background: #fff; border: 1.5px solid var(--line); border-radius: 10px;
+      padding: 10px 12px; font: inherit; color: var(--ink); outline: none;
+    }
+    .mp-input:focus { border-color: var(--accent); }
+    .mp-input-bad { border-color: #C0392B; }
+    .mp-textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; }
+    .mp-form-err { color: #C0392B; font-size: 12.5px; min-height: 16px; margin: 6px 0 0; }
+    .mp-slug-row { display: flex; align-items: center; gap: 6px; }
+    .mp-slug-prefix { font-family: monospace; color: var(--ink-soft); font-size: 15px; }
+    .mp-linkbox {
+      font-family: monospace; font-size: 13px; background: var(--paper-deep);
+      border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px;
+      word-break: break-all; margin-top: 10px;
+    }
+    .mp-doors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .mp-door {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      background: var(--paper); border: 1.5px solid var(--line); border-radius: 14px;
+      padding: 16px 8px; font-weight: 600; font-size: 13.5px;
+    }
+    .mp-door:active { border-color: var(--accent); }
+    .mp-door-emoji { font-size: 26px; }
+    .mp-doors .mp-door:last-child { grid-column: 1 / -1; }
+    .mp-mini-toast {
+      position: fixed; left: 50%; bottom: calc(30px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      background: var(--ink); color: var(--paper); font-size: 13.5px; font-weight: 600;
+      padding: 10px 18px; border-radius: 99px; z-index: 90; box-shadow: 0 6px 20px rgba(0,0,0,.3);
     }
 
-    document.getElementById('press-btn').addEventListener('click', async () => {
-      try {
-        const res = await fetch('/api/press', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
-        });
-        if (res.ok) loadLeaderboard();
-        else if (res.status === 401) document.getElementById('count').textContent = 'Sign in to press!';
-      } catch {}
-    });
+    /* ----------------------------------------------------------- editor */
+    .mp-topbar {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; gap: 8px;
+      padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+      background: rgba(250,246,238,.94); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .mp-topbar-title {
+      flex: 1; min-width: 0; text-align: left;
+      font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 17px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mp-savestate { font-size: 11.5px; color: var(--ink-soft); flex: none; min-width: 52px; text-align: right; }
+    #mp-canvas-wrap { max-width: 720px; margin: 0 auto; }
+    #mp-canvas { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 200px; }
+    .mp-add-section {
+      display: block; width: calc(100% - 36px); margin: 14px auto 0;
+      border: 1.5px dashed var(--line); border-radius: 14px; padding: 13px;
+      color: var(--ink-soft); font-weight: 600; font-size: 14px; background: transparent;
+    }
+    .mp-panel {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
+      background: #FFFDF8; border-top: 1px solid var(--line);
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; gap: 8px;
+      max-width: 720px; margin: 0 auto;
+    }
+    .mp-panel-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+    .mp-panel-row::-webkit-scrollbar { display: none; }
+    .mp-panel-hint { justify-content: center; font-size: 12.5px; padding: 4px 0; }
+    .mp-chip-btn { border: 1px solid var(--line); background: #fff; }
+    .mp-chip-on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .mp-chip-strong { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .mp-chip-danger { color: #C0392B; border-color: #E5B4AE; }
+    .mp-slider { flex: 1; min-width: 110px; accent-color: var(--accent); }
+    .mp-swatch {
+      width: 26px; height: 26px; border-radius: 50%; flex: none;
+      border: 1.5px solid rgba(31,43,71,.18); padding: 0;
+    }
+    .mp-swatch-on { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .mp-swatch-custom { border-radius: 8px; width: 34px; }
+    .mp-bg-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .mp-bg-cell { height: 44px; border-radius: 10px; border: 1.5px solid var(--line); }
 
-    loadLeaderboard();
-  </script>
+    /* --------------------------------------------- rendered page pieces */
+    .mp-section { position: relative; overflow: hidden; }
+    .mp-block { position: absolute; }
+    .mp-editing .mp-block { touch-action: none; cursor: grab; }
+    .mp-editing .mp-block:active { cursor: grabbing; }
+    .mp-text { white-space: pre-wrap; word-break: break-word; line-height: 1.25; }
+    .mp-block.mp-selected { outline: 2px dashed var(--accent); outline-offset: 5px; border-radius: 4px; }
+    .mp-handle {
+      position: absolute; width: 28px; height: 28px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--accent); color: var(--accent-deep);
+      display: grid; place-items: center; font-size: 14px; z-index: 300;
+      box-shadow: 0 2px 6px rgba(0,0,0,.22); touch-action: none;
+    }
+    .mp-handle-rotate { top: -40px; left: 50%; margin-left: -14px; }
+    .mp-handle-resize { right: -16px; bottom: -16px; cursor: nwse-resize; }
+    .mp-section-bar {
+      position: absolute; top: 8px; right: 8px; z-index: 250;
+      display: flex; gap: 6px;
+    }
+    .mp-section-bar .mp-chip-btn { background: rgba(255,253,248,.92); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+
+    /* text effects (colors/fonts are set inline by the renderer) */
+    .mp-tx-rainbow {
+      background: linear-gradient(90deg, #ff5e5e, #ffb648, #ffe93f, #63d471, #4fc3f7, #9575ff, #ff5ecb);
+      -webkit-background-clip: text; background-clip: text; color: transparent !important;
+    }
+    .mp-tx-shadow { text-shadow: 3px 3px 0 rgba(31,43,71,.22); }
+    .mp-tx-sparkle {
+      text-shadow: 0 0 7px rgba(255,255,255,.75), 0 0 16px rgba(255,214,130,.5);
+    }
+    .mp-tx-sparkle::before, .mp-tx-sparkle::after {
+      content: '✦'; position: absolute; font-size: .55em; color: #FFD97A;
+      text-shadow: none; animation: mp-twinkle 1.6s infinite;
+    }
+    .mp-tx-sparkle::before { top: -.5em; left: -.7em; }
+    .mp-tx-sparkle::after { bottom: -.4em; right: -.5em; animation-delay: .8s; }
+    @keyframes mp-twinkle {
+      0%, 100% { opacity: .15; transform: scale(.7) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.2) rotate(22deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/js/renderer.js"></script>
+  <script src="/js/editor.js"></script>
+  <script src="/js/app.js"></script>
 </body>
 </html>
