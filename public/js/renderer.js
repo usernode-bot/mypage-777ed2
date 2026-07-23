@@ -1,9 +1,10 @@
 // PageRenderer — the one true page-document → DOM renderer.
-// Used by the editor canvas today and by the public page view in the
-// public-viewing phase. SAFETY CONTRACT: page documents are user-controlled
-// JSON that will eventually render on public URLs — user strings only ever
-// go through textContent, colors are whitelisted to hex, fonts/styles to a
-// fixed palette. Never innerHTML anything from the document.
+// Used by the editor canvas, the in-app preview and the public viewer
+// (view.html). SAFETY CONTRACT: page documents are user-controlled JSON
+// rendered on public URLs — user strings only ever go through textContent,
+// colors are whitelisted to hex, fonts/styles to a fixed palette, image
+// sources to /assets/<int>, link URLs to http(s), and sticker art comes
+// only from the app's own catalog. Never innerHTML anything from the doc.
 (function () {
   'use strict';
 
@@ -18,8 +19,26 @@
 
   const HEX_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
+  // Catalog (stickers by key) — set once after fetching /api/public/catalog.
+  let stickerMap = {};
+  function setCatalog(catalog) {
+    stickerMap = {};
+    (catalog && catalog.stickerPacks || []).forEach((pack) => {
+      (pack.stickers || []).forEach((st) => { stickerMap[st.key] = st.svg; });
+    });
+  }
+
   function safeColor(c, fallback) {
     return (typeof c === 'string' && HEX_RE.test(c)) ? c : fallback;
+  }
+
+  function safeUrl(u) {
+    if (typeof u !== 'string') return null;
+    try {
+      const parsed = new URL(u, location.origin);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    } catch {}
+    return null;
   }
 
   function clamp(n, lo, hi, fb) {
@@ -35,6 +54,12 @@
     const angle = clamp(bg.angle, 0, 360, 160);
     if (bg.type === 'gradient') {
       return { background: `linear-gradient(${angle}deg, ${c1}, ${c2})` };
+    }
+    if (bg.type === 'image' && Number.isInteger(bg.assetId)) {
+      const base = { backgroundColor: c1, backgroundImage: `url("/assets/${bg.assetId}")` };
+      if (bg.tile) { base.backgroundSize = clamp(bg.tileSize, 40, 600, 220) + 'px'; base.backgroundRepeat = 'repeat'; }
+      else { base.backgroundSize = 'cover'; base.backgroundPosition = 'center'; }
+      return base;
     }
     if (bg.type === 'pattern') {
       const ink = safeColor(bg.ink, '#E7DFCC');
@@ -59,6 +84,8 @@
     el.style.backgroundColor = '';
     el.style.backgroundImage = '';
     el.style.backgroundSize = '';
+    el.style.backgroundRepeat = '';
+    el.style.backgroundPosition = '';
     const css = bgToCss(bg);
     for (const k in css) el.style[k] = css[k];
   }
@@ -66,7 +93,7 @@
   function applyBlockGeometry(el, block) {
     el.style.left = clamp(block.x, -20, 110, 4) + '%';
     el.style.top = clamp(block.y, 0, 8000, 20) + 'px';
-    el.style.width = clamp(block.w, 8, 120, 60) + '%';
+    el.style.width = clamp(block.w, 4, 120, 60) + '%';
     el.style.zIndex = String(Math.round(clamp(block.z, 1, 200, 1)));
     el.style.transform = `rotate(${clamp(block.rotation, -180, 180, 0)}deg)`;
   }
@@ -103,16 +130,40 @@
     }
   }
 
-  function renderBlock(block) {
+  function renderBlock(block, ctx) {
     const el = document.createElement('div');
     el.className = 'mp-block';
     el.dataset.blockId = String(block.id || '');
     applyBlockGeometry(el, block);
+    const props = block.props && typeof block.props === 'object' ? block.props : {};
+
     if (block.type === 'text') {
       const t = document.createElement('div');
       t.className = 'mp-text';
-      applyTextProps(t, block.props);
+      applyTextProps(t, props);
       el.appendChild(t);
+    } else if (block.type === 'image') {
+      const wrap = document.createElement('div');
+      wrap.className = 'mp-image';
+      if (Number.isInteger(props.assetId)) {
+        const img = document.createElement('img');
+        img.src = '/assets/' + props.assetId; // only ever our own asset route
+        img.alt = typeof props.alt === 'string' ? props.alt.slice(0, 200) : '';
+        img.loading = 'lazy';
+        img.draggable = false;
+        wrap.appendChild(img);
+      }
+      el.appendChild(wrap);
+    } else if (block.type === 'sticker') {
+      const wrap = document.createElement('div');
+      wrap.className = 'mp-sticker';
+      const svg = stickerMap[props.key];
+      // Catalog SVG is app-shipped content (seeded by the app itself),
+      // keyed by a whitelist lookup — never user-supplied markup.
+      if (svg) wrap.innerHTML = svg;
+      el.appendChild(wrap);
+    } else if (block.type === 'widget' && window.MPWidgets) {
+      el.appendChild(window.MPWidgets.render(props, ctx || {}));
     }
     return el;
   }
@@ -134,9 +185,44 @@
     mount.querySelectorAll('.mp-section').forEach(fitSection);
   }
 
-  function render(doc, mount) {
+  function renderFooter(doc, ctx) {
+    const footer = document.createElement('div');
+    footer.className = 'mp-footer';
+    const fs = (ctx && ctx.footerStyle) || (doc && doc.footerStyle) || null;
+    if (fs && typeof fs === 'object') {
+      const bg = safeColor(fs.bg, null);
+      const color = safeColor(fs.color, null);
+      if (bg) footer.style.background = bg;
+      if (color) footer.style.color = color;
+    }
+    const span = document.createElement('span');
+    span.append('made in ');
+    const b = document.createElement('b');
+    b.textContent = 'MyPage';
+    span.appendChild(b);
+    span.append(' — ');
+    const a = document.createElement('a');
+    a.href = '/make';
+    a.textContent = 'make your own →';
+    span.appendChild(a);
+    footer.appendChild(span);
+    if (ctx && ctx.onReport) {
+      const rep = document.createElement('a');
+      rep.className = 'mp-footer-report';
+      rep.href = '#';
+      rep.textContent = 'report this page';
+      rep.addEventListener('click', (e) => { e.preventDefault(); ctx.onReport(); });
+      footer.appendChild(rep);
+    }
+    return footer;
+  }
+
+  // render(doc, mount, ctx) — ctx flows into widgets:
+  //   { visits, song, editing, guestbook: {...}, footer: bool, footerStyle, onReport }
+  function render(doc, mount, ctx) {
     mount.textContent = '';
     const sections = (doc && Array.isArray(doc.sections)) ? doc.sections : [];
+    const widgetCtx = Object.assign({}, ctx, { song: doc && doc.song });
     sections.forEach((section, si) => {
       const sec = document.createElement('div');
       sec.className = 'mp-section';
@@ -146,13 +232,14 @@
       applyBg(sec, section.background);
       const blocks = Array.isArray(section.blocks) ? section.blocks : [];
       blocks.forEach((block, bi) => {
-        const el = renderBlock(block);
+        const el = renderBlock(block, widgetCtx);
         el.dataset.si = String(si);
         el.dataset.bi = String(bi);
         sec.appendChild(el);
       });
       mount.appendChild(sec);
     });
+    if (ctx && ctx.footer) mount.appendChild(renderFooter(doc, ctx));
     // Fonts/layout may still be settling; fit now and once more next frame.
     fitSections(mount);
     requestAnimationFrame(() => fitSections(mount));
@@ -160,6 +247,7 @@
 
   window.PageRenderer = {
     render,
+    renderBlock,
     fitSection,
     fitSections,
     applyBlockGeometry,
@@ -167,7 +255,10 @@
     applyBg,
     bgToCss,
     safeColor,
+    safeUrl,
     clamp,
+    setCatalog,
+    getSticker: (key) => stickerMap[key],
     FONTS,
   };
 })();
