@@ -1,3 +1,11 @@
 {
-  "secrets": []
+  "name": "MyPage",
+  "icon": { "emoji": "✨" },
+  "secrets": [],
+  "tests": [
+    { "name": "My Pages renders", "path": "/", "expectSelector": "[data-testid=my-pages]" },
+    { "name": "Public page renders account-less", "path": "/p/staging-demo-corner", "expectSelector": "[data-testid=page-view] .mp-footer" },
+    { "name": "Directory gallery renders", "path": "/directory", "expectSelector": "[data-testid=directory]" },
+    { "name": "Account-less make-your-own loads", "path": "/make", "expectSelector": "[data-testid=make-start]" }
+  ]
 }
