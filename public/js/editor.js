@@ -40,7 +40,7 @@
     { key: 'none', label: 'plain' },
     { key: 'sparkle', label: '✨ sparkle' },
     { key: 'rainbow', label: '🌈 rainbow' },
-    { key: 'shadow', label: '🕶 shadow' },
+    { key: 'shadow', label: '🕶️ shadow' },
     { key: 'outline', label: '◯ outline' },
   ];
   const WIDGET_KINDS = [
@@ -50,7 +50,7 @@
     { kind: 'mood', label: '😌 mood', mk: () => ({ kind: 'mood', mood: '😌', label: 'cozy' }) },
     { kind: 'currently', label: '📚 currently…', mk: () => ({ kind: 'currently', items: [{ verb: 'reading', what: '…' }] }) },
     { kind: 'links', label: '🔗 link buttons', mk: () => ({ kind: 'links', links: [{ label: 'my link', url: 'https://' }] }) },
-    { kind: 'marquee', label: '〰 marquee', mk: () => ({ kind: 'marquee', text: 'welcome to my corner ·', speed: 12, color: '#D65A9E', size: 18 }) },
+    { kind: 'marquee', label: '〰️ marquee', mk: () => ({ kind: 'marquee', text: 'welcome to my corner ·', speed: 12, color: '#D65A9E', size: 18 }) },
   ];
   const FOOTER_STYLES = [
     { bg: '#1F2B47', color: '#FAF6EE' },
@@ -71,6 +71,7 @@
   let saving = false;
   let dirty = false;
   let gesture = null;
+  let previewing = false;   // 👁️ view-as-a-visitor mode
 
   const uid = (p) => p + '-' + Math.random().toString(36).slice(2, 8);
   const deep = (o) => JSON.parse(JSON.stringify(o));
@@ -106,14 +107,15 @@
         <button id="mp-back" class="mp-iconbtn" aria-label="Back">←</button>
         <button id="mp-title" class="mp-topbar-title"></button>
         <span id="mp-savestate" class="mp-savestate"></span>
+        <button id="mp-preview" class="mp-iconbtn" data-testid="preview-toggle" aria-label="Preview">👁️</button>
         <button id="mp-menu" class="mp-iconbtn" aria-label="Page menu">⋯</button>
         <button id="mp-publish" class="mp-btn mp-btn-accent mp-btn-sm">Publish</button>
       </header>
       <div id="mp-toolstrip" class="mp-toolstrip">
         <button class="mp-chip mp-chip-btn" data-tool="vibes">✨ vibes</button>
         <button class="mp-chip mp-chip-btn" data-tool="song">🎵 song</button>
-        <button class="mp-chip mp-chip-btn" data-tool="cursor">🖱 cursor</button>
-        <button class="mp-chip mp-chip-btn" data-tool="footer">🏷 footer</button>
+        <button class="mp-chip mp-chip-btn" data-tool="cursor">🖱️ cursor</button>
+        <button class="mp-chip mp-chip-btn" data-tool="footer">🏷️ footer</button>
         <button class="mp-chip mp-chip-btn" data-tool="guestbook" id="mp-tool-gb">📖 book</button>
       </div>
       <div id="mp-banner"></div>
@@ -126,12 +128,18 @@
     `;
     canvas = document.getElementById('mp-canvas');
     sel = null; dirty = false; saving = false; gesture = null;
+    previewing = false;
+    document.body.classList.remove('mp-previewing');
     clearTimeout(saveTimer);
 
     document.getElementById('mp-back').addEventListener('click', async () => {
       if (dirty) await save();
+      document.body.classList.remove('mp-previewing');
+      MPCursor.apply(null, document.body);
+      MPSong.stop();
       MP.navigate(isLocal ? '/make' : '/');
     });
+    document.getElementById('mp-preview').addEventListener('click', togglePreview);
     document.getElementById('mp-title').addEventListener('click', openRename);
     document.getElementById('mp-publish').addEventListener('click', openPublish);
     document.getElementById('mp-menu').addEventListener('click', openMenu);
@@ -152,6 +160,7 @@
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
     canvas.addEventListener('dblclick', (e) => {
+      if (previewing) return;
       const blockEl = e.target.closest('.mp-block');
       if (blockEl) { selectBlock(+blockEl.dataset.si, +blockEl.dataset.bi); openBlockEditor(); }
     });
@@ -199,13 +208,13 @@
     if (page.directory_delisted_by_report) {
       const b = document.createElement('div');
       b.className = 'mp-warnbar';
-      b.textContent = '⚠ Someone reported this page as being about them, so it’s hidden from the directory while that’s sorted out. The link still works.';
+      b.textContent = '⚠️ Someone reported this page as being about them, so it’s hidden from the directory while that’s sorted out. The link still works.';
       el.appendChild(b);
     }
     if (isLocal) {
       const b = document.createElement('div');
       b.className = 'mp-infobar';
-      b.textContent = '✎ Draft saved on this device only — publish to give it a home.';
+      b.textContent = '✏️ Draft saved on this device only — publish to give it a home.';
       el.appendChild(b);
     }
   }
@@ -262,16 +271,48 @@
       const bgBtn = document.createElement('button');
       bgBtn.className = 'mp-chip mp-chip-btn';
       bgBtn.textContent = '🎨';
-      bgBtn.title = 'section background';
+      bgBtn.title = 'section settings';
       bgBtn.addEventListener('click', () => openSectionModal(si));
       const addBtn = document.createElement('button');
       addBtn.className = 'mp-chip mp-chip-btn';
       addBtn.textContent = '＋ add';
       addBtn.addEventListener('click', () => openInsertMenu(si));
       bar.append(bgBtn, addBtn);
+      if (doc.sections.length > 1) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'mp-chip mp-chip-btn mp-chip-danger';
+        delBtn.textContent = '🗑️';
+        delBtn.title = 'delete section';
+        delBtn.setAttribute('aria-label', 'Delete section');
+        delBtn.addEventListener('click', () => confirmDeleteSection(si));
+        bar.appendChild(delBtn);
+      }
       secEl.appendChild(bar);
     });
     restoreSelection();
+  }
+
+  // 👁️ preview: render exactly what a visitor sees (no selection, no
+  // section bars, live links/song, custom cursor); ✏️ returns to editing.
+  function togglePreview() {
+    previewing = !previewing;
+    const btn = document.getElementById('mp-preview');
+    document.body.classList.toggle('mp-previewing', previewing);
+    if (previewing) {
+      deselect();
+      gesture = null;
+      canvas.classList.remove('mp-editing');
+      R().render(doc, canvas, { editing: false, visits: 47, footer: true, footerStyle: doc.footerStyle });
+      MPCursor.apply(doc.cursor, document.body);
+      if (btn) { btn.textContent = '✏️'; btn.setAttribute('aria-label', 'Back to editing'); }
+    } else {
+      MPCursor.apply(null, document.body);
+      MPSong.stop();
+      canvas.classList.add('mp-editing');
+      renderCanvas();
+      renderPanel();
+      if (btn) { btn.textContent = '👁️'; btn.setAttribute('aria-label', 'Preview'); }
+    }
   }
 
   function blockEl(si, bi) {
@@ -279,6 +320,11 @@
   }
   function sectionEl(si) {
     return canvas.querySelector(`.mp-section[data-si="${si}"]`);
+  }
+  // The centered content column blocks position against (x/w percentages
+  // are relative to it, not the full-bleed section).
+  function sectionContentEl(si) {
+    return R().sectionContent(sectionEl(si));
   }
   function selBlock() {
     return sel ? (doc.sections[sel.si] || { blocks: [] }).blocks[sel.bi] : null;
@@ -326,6 +372,7 @@
   // -------------------------------------------------------------- gestures
 
   function onPointerDown(e) {
+    if (previewing) return;
     if (e.button !== undefined && e.button !== 0) return;
     const handle = e.target.closest('.mp-handle');
     const blockDom = e.target.closest('.mp-block');
@@ -336,7 +383,7 @@
       const block = selBlock();
       if (!el || !block) return;
       const rect = el.getBoundingClientRect();
-      const secRect = sectionEl(sel.si).getBoundingClientRect();
+      const secRect = sectionContentEl(sel.si).getBoundingClientRect();
       if (handle.classList.contains('mp-handle-rotate')) {
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
@@ -358,7 +405,7 @@
       if (!sel || sel.si !== si || sel.bi !== bi) selectBlock(si, bi);
       const block = selBlock();
       const el = blockEl(si, bi);
-      const secRect = sectionEl(si).getBoundingClientRect();
+      const secRect = sectionContentEl(si).getBoundingClientRect();
       gesture = {
         type: 'drag', el, block, secRect,
         startX: e.clientX, startY: e.clientY,
@@ -484,8 +531,8 @@
     let ctl;
     const doors = [
       ['📝', 'text', () => insertBlock(si, { id: uid('b'), type: 'text', x: 8, y: 40, w: 66, rotation: 0, props: { text: 'write something…', font: 'inter', size: 22, color: '#1F2B47', bold: false, align: 'left', style: 'none' } }, true)],
-      ['🖼', 'photo', () => pickImage(si)],
-      ['🏷', 'sticker', () => openStickerPicker(si)],
+      ['🖼️', 'photo', () => pickImage(si)],
+      ['🏷️', 'sticker', () => openStickerPicker(si)],
       ['🧩', 'widget', () => openWidgetPicker(si)],
     ];
     doors.forEach(([emoji, label, fn]) => {
@@ -500,9 +547,38 @@
 
   // ------------------------------------------------------------- stickers
 
+  function insertEmojiSticker(si, emoji) {
+    insertBlock(si, { id: uid('b'), type: 'sticker', x: 35, y: 60, w: 14, rotation: 0, props: { emoji } });
+  }
+
   function openStickerPicker(si) {
     const content = document.createElement('div');
     let ctl;
+
+    // Emoji stickers — a featured row plus the full picker.
+    const emojiLabel = document.createElement('div');
+    emojiLabel.className = 'mp-label';
+    emojiLabel.textContent = 'emoji';
+    content.appendChild(emojiLabel);
+    const emojiRow = document.createElement('div');
+    emojiRow.className = 'mp-emoji-featured';
+    ['😀', '😎', '💖', '🌈', '⭐', '🔥', '🌸', '🐸', '🍓', '🎀'].forEach((em) => {
+      const cell = document.createElement('button');
+      cell.className = 'mp-emoji-cell';
+      cell.textContent = em;
+      cell.addEventListener('click', () => { ctl.close(); insertEmojiSticker(si, em); });
+      emojiRow.appendChild(cell);
+    });
+    const browse = document.createElement('button');
+    browse.className = 'mp-chip mp-chip-btn';
+    browse.textContent = 'all emoji…';
+    browse.addEventListener('click', () => {
+      ctl.close();
+      MPEmoji.open({ title: 'Pick an emoji', onPick: (em) => insertEmojiSticker(si, em) });
+    });
+    emojiRow.appendChild(browse);
+    content.appendChild(emojiRow);
+
     (catalog.stickerPacks || []).forEach((pack) => {
       const label = document.createElement('div');
       label.className = 'mp-label';
@@ -643,7 +719,17 @@
     const content = document.createElement('div');
     const mood = textInput(block.props.mood, 8, '😌');
     const label = textInput(block.props.label, 40, 'cozy');
-    content.append(fieldRow('Mood (emoji)', mood), fieldRow('One word', label));
+    const moodRow = document.createElement('div');
+    moodRow.className = 'mp-panel-row';
+    mood.style.flex = '1';
+    const pick = document.createElement('button');
+    pick.className = 'mp-chip mp-chip-btn';
+    pick.textContent = '😊 pick';
+    pick.addEventListener('click', () => {
+      MPEmoji.open({ title: 'Pick a mood', onPick: (em) => { mood.value = em; } });
+    });
+    moodRow.append(mood, pick);
+    content.append(fieldRow('Mood (emoji)', moodRow), fieldRow('One word', label));
     MP.openModal({
       title: '😌 mood', contentEl: content,
       actions: [{ label: 'Cancel' }, {
@@ -746,7 +832,7 @@
     });
     content.append(fieldRow('Text', text), fieldRow('Slow → fast', speed), fieldRow('Size', size), fieldRow('Color', colorRow));
     MP.openModal({
-      title: '〰 marquee', contentEl: content,
+      title: '〰️ marquee', contentEl: content,
       actions: [{ label: 'Cancel' }, {
         label: 'Save', accent: true,
         onClick(ctl) {
@@ -790,7 +876,7 @@
     const alt = textInput(block.props.alt, 200, 'describe the photo (for screen readers)');
     content.appendChild(fieldRow('Alt text', alt));
     MP.openModal({
-      title: '🖼 photo', contentEl: content,
+      title: '🖼️ photo', contentEl: content,
       actions: [{ label: 'Cancel' }, {
         label: 'Save', accent: true,
         onClick(ctl) { block.props.alt = alt.value; ctl.close(); rerenderSelected(); },
@@ -827,7 +913,8 @@
     down.className = 'mp-chip mp-chip-btn'; down.textContent = '⬇ layer';
     down.addEventListener('click', () => layerSelected(-1));
     const del = document.createElement('button');
-    del.className = 'mp-chip mp-chip-btn mp-chip-danger'; del.textContent = '🗑';
+    del.className = 'mp-chip mp-chip-btn mp-chip-danger'; del.textContent = '🗑️';
+    del.setAttribute('aria-label', 'Delete block');
     del.addEventListener('click', deleteSelected);
     const done = document.createElement('button');
     done.className = 'mp-chip mp-chip-btn'; done.textContent = 'done';
@@ -976,9 +1063,9 @@
           MP.toast(page.directory_listed ? 'Listed in the directory' : 'Hidden from the directory');
         } catch (err) { MP.toast(err.message); }
       });
-      mkRow('🗑 delete this page', openDelete);
+      mkRow('🗑️ delete this page', openDelete);
     } else {
-      mkRow('🗑 discard this draft', () => {
+      mkRow('🗑️ discard this draft', () => {
         MPDraft.clear();
         MP.toast('Draft discarded');
         MP.navigate('/make', true);
@@ -1236,7 +1323,7 @@
     const pixel = MPCursor.buildPixelEditor(editorMount, doc.cursor && doc.cursor.type === 'pixels' ? doc.cursor.grid : null);
 
     ctl = MP.openModal({
-      title: '🖱 your cursor',
+      title: '🖱️ your cursor',
       contentEl: content,
       actions: [
         { label: 'Close' },
@@ -1341,7 +1428,7 @@
       row.appendChild(b);
     });
     content.appendChild(row);
-    MP.openModal({ title: '🏷 footer mark', contentEl: content, actions: [{ label: 'Done' }] });
+    MP.openModal({ title: '🏷️ footer mark', contentEl: content, actions: [{ label: 'Done' }] });
   }
 
   // ---------------------------------------------------- guestbook manager
@@ -1410,7 +1497,7 @@
         }
         const del = document.createElement('button');
         del.className = 'mp-chip mp-chip-btn mp-chip-danger';
-        del.textContent = '🗑';
+        del.textContent = '🗑️';
         del.addEventListener('click', async () => {
           try {
             await MP.api(`/api/pages/${page.id}/guestbook/${entry.id}`, { method: 'DELETE' });
@@ -1428,6 +1515,35 @@
   }
 
   // -------------------------------------------------------------- sections
+
+  // Every section delete goes through this confirm — blocks go with it.
+  function confirmDeleteSection(si, parentCtl) {
+    const content = document.createElement('div');
+    const p = document.createElement('p');
+    p.className = 'mp-muted';
+    p.style.fontSize = '13.5px';
+    p.textContent = 'Delete this section and everything on it? There’s no undo.';
+    content.appendChild(p);
+    MP.openModal({
+      title: 'Delete section?',
+      contentEl: content,
+      actions: [
+        { label: 'Keep it' },
+        {
+          label: 'Delete section', accent: true,
+          onClick(ctl) {
+            doc.sections.splice(si, 1);
+            deselect();
+            markDirty();
+            renderCanvas();
+            ctl.close();
+            if (parentCtl) parentCtl.close();
+            MP.toast('Section deleted');
+          },
+        },
+      ],
+    });
+  }
 
   function openSectionModal(si) {
     const section = doc.sections[si];
@@ -1469,7 +1585,7 @@
     let ctl;
     const photoBg = document.createElement('button');
     photoBg.className = 'mp-chip mp-chip-btn';
-    photoBg.textContent = '🖼 photo background';
+    photoBg.textContent = '🖼️ photo background';
     photoBg.addEventListener('click', () => { ctl.close(); pickImage(si, true); });
     const tileToggle = document.createElement('button');
     tileToggle.className = 'mp-chip mp-chip-btn';
@@ -1524,13 +1640,19 @@
       doc.sections.splice(si + 1, 0, sec);
       deselect(); markDirty(); renderCanvas(); ctl.close();
     }));
-    if (doc.sections.length > 1) rowActs.appendChild(mkAct('🗑 delete section', () => {
-      doc.sections.splice(si, 1);
-      deselect(); markDirty(); renderCanvas(); ctl.close();
-    }, true));
+    if (doc.sections.length > 1) {
+      rowActs.appendChild(mkAct('🗑️ delete section', () => confirmDeleteSection(si, ctl), true));
+    }
     content.appendChild(rowActs);
+    if (doc.sections.length === 1) {
+      const only = document.createElement('p');
+      only.className = 'mp-muted';
+      only.style.fontSize = '12.5px';
+      only.textContent = 'A page always keeps at least one section — add another to be able to delete this one.';
+      content.appendChild(only);
+    }
 
-    ctl = MP.openModal({ title: 'Section', contentEl: content, actions: [{ label: 'Done' }] });
+    ctl = MP.openModal({ title: 'Section settings', contentEl: content, actions: [{ label: 'Done' }] });
   }
 
   // --------------------------------------------------------------- publish

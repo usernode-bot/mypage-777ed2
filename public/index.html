@@ -239,8 +239,19 @@
       background: #FDECEA; color: #922B21; border-bottom: 1px solid #F5B7B1;
     }
     .mp-infobar { background: #FFF7E8; color: #7A5A1E; border-color: #F0DFB8; }
-    #mp-canvas-wrap { max-width: 720px; margin: 0 auto; }
-    #mp-canvas { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 200px; }
+    /* Full-bleed canvas: section backgrounds span the editor's whole
+       width; blocks live in the renderer's centered content column. A
+       light dashed edge marks the editing column while editing. */
+    #mp-canvas-wrap { margin: 0 auto; }
+    #mp-canvas { min-height: 200px; }
+    #mp-canvas.mp-editing .mp-section-content {
+      border-left: 1px dashed rgba(31,43,71,.18);
+      border-right: 1px dashed rgba(31,43,71,.18);
+    }
+    /* 👁️ preview mode — hide every editing affordance */
+    body.mp-previewing #mp-toolstrip,
+    body.mp-previewing #mp-panel,
+    body.mp-previewing #mp-add-section { display: none; }
     .mp-add-section {
       display: block; width: calc(100% - 36px); margin: 14px auto 0;
       border: 1.5px dashed var(--line); border-radius: 14px; padding: 13px;
@@ -269,6 +280,11 @@
     .mp-swatch-custom { border-radius: 8px; width: 34px; }
     .mp-bg-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
     .mp-bg-cell { height: 40px; border-radius: 10px; border: 1.5px solid var(--line); }
+    .mp-emoji-featured { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+    .mp-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin-bottom: 6px; }
+    .mp-emoji-cell { font-size: 23px; line-height: 1; padding: 6px 2px; border-radius: 8px; }
+    .mp-emoji-cell:active { background: var(--paper-deep); }
+    .mp-emoji-mount { max-height: 40vh; overflow-y: auto; }
     .mp-sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
     .mp-sticker-cell { padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
     .mp-sticker-cell svg { width: 100%; height: auto; display: block; }
@@ -321,6 +337,7 @@
   <script src="/js/cursor.js"></script>
   <script src="/js/song.js"></script>
   <script src="/js/draft.js"></script>
+  <script src="/js/emoji.js"></script>
   <script src="/js/editor.js"></script>
   <script src="/js/app.js"></script>
 </body>

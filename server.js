@@ -247,12 +247,13 @@ app.post('/api/public/pages/:slug/guestbook', async (req, res) => {
       if (!name) return res.status(400).json({ error: 'Sign with a name' });
       status = 'pending';
     }
-    await pool.query(
+    const ins = await pool.query(
       `INSERT INTO guestbook_entries (page_id, author_user_id, author_name, body, status)
-       VALUES ($1, $2, $3, $4, $5)`,
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, author_name, body, created_at, status`,
       [rows[0].id, userId, name, body, status]
     );
-    res.json({ ok: true, status });
+    res.json({ ok: true, status, entry: ins.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -894,6 +895,7 @@ const SEED_DOCS = {
         B.widget('m1', 4, 170, 92, 0, 2, { kind: 'marquee', text: '♡ welcome to my corner — no algorithm here ♡', speed: 11, color: '#9FE8D2', size: 18 }),
         B.widget('sg1', 8, 240, 84, -1, 3, { kind: 'song' }),
         B.sticker('st1', 74, 400, 18, 12, 4, 'blink-star'),
+        { id: 'st-em1', type: 'sticker', x: 8, y: 380, w: 14, rotation: -8, z: 4, props: { emoji: '🌟' } },
         B.widget('w1', 10, 420, 56, 2, 2, { kind: 'mood', mood: '✨', label: 'sparkly' }),
       ]),
       B.section('s2', { type: 'pattern', pattern: 'dots', color: '#FAF6EE', ink: '#E7DFCC' }, 520, [

@@ -45,19 +45,45 @@
     currentUrl = null; currentBtn = null; currentDisc = null;
   }
 
-  // Play/pause toggle — always user-initiated (autoplay policies require a
-  // tap anyway, and a page that autoplays at you is rude).
-  function toggle(url, btn, disc) {
-    if (currentUrl === url && audio && !audio.paused) { stop(); return; }
+  // Starts playback; resolves true when the browser let it play.
+  function start(url, btn, disc) {
     stop();
     audio = new Audio(url);
     audio.loop = true; // on repeat — the whole point
     audio.volume = 0.85;
     currentUrl = url; currentBtn = btn; currentDisc = disc;
-    audio.play().then(() => {
+    return audio.play().then(() => {
       if (btn) btn.textContent = '❚❚';
       if (disc) disc.classList.add('mpw-spinning');
-    }).catch(() => stop());
+      return true;
+    }).catch(() => { stop(); return false; });
+  }
+
+  // Play/pause toggle from the song widget's button.
+  function toggle(url, btn, disc) {
+    if (currentUrl === url && audio && !audio.paused) { stop(); return; }
+    start(url, btn, disc);
+  }
+
+  // Public pages autoplay where the browser allows it; when the autoplay
+  // policy blocks un-clicked audio we start on the visitor's first
+  // gesture instead (taps on the widget's own play button are left to it).
+  function autoplay(url, btn, disc) {
+    start(url, btn, disc).then((ok) => {
+      if (ok) return;
+      const cleanup = () => {
+        document.removeEventListener('pointerdown', retry);
+        document.removeEventListener('keydown', retry);
+      };
+      const retry = (e) => {
+        cleanup();
+        if (e && e.target && e.target.closest && e.target.closest('.mpw-song-play')) return;
+        if (audio && !audio.paused) return;
+        start(url, btn, disc);
+      };
+      document.addEventListener('pointerdown', retry);
+      document.addEventListener('keydown', retry);
+    });
   }
 
   // "listen ↗" link-out with service detection. URL is safeUrl-validated.
@@ -82,5 +108,5 @@
     return a;
   }
 
-  window.MPSong = { sourceUrl, toggle, stop, linkOut, setCatalog };
+  window.MPSong = { sourceUrl, toggle, stop, linkOut, setCatalog, autoplay };
 })();
