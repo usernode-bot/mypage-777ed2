@@ -181,9 +181,12 @@
         el.appendChild(hint);
         return el;
       }
-      (gb.entries || []).slice(0, 30).forEach((entry) => {
+      const entriesBox = document.createElement('div');
+      el.appendChild(entriesBox);
+
+      function entryRow(entry, pending) {
         const row = document.createElement('div');
-        row.className = 'mpw-gb-entry';
+        row.className = 'mpw-gb-entry' + (pending ? ' mpw-gb-entry-pending' : '');
         const name = document.createElement('span');
         name.className = 'mpw-gb-name';
         name.textContent = entry.author_name;
@@ -193,7 +196,12 @@
         const body = document.createElement('div');
         body.textContent = entry.body;
         row.append(name, time);
-        if (gb.onReportEntry) {
+        if (pending) {
+          const wait = document.createElement('span');
+          wait.className = 'mpw-gb-wait';
+          wait.textContent = 'awaiting approval';
+          row.appendChild(wait);
+        } else if (gb.onReportEntry) {
           const rep = document.createElement('button');
           rep.className = 'mpw-gb-report';
           rep.textContent = 'report';
@@ -201,13 +209,20 @@
           row.appendChild(rep);
         }
         row.appendChild(body);
-        el.appendChild(row);
-      });
+        return row;
+      }
+
+      (gb.entries || []).slice(0, 30).forEach((entry) => entriesBox.appendChild(entryRow(entry)));
+      let emptyNote = null;
       if (!(gb.entries || []).length) {
-        const none = document.createElement('div');
-        none.className = 'mpw-gb-note';
-        none.textContent = 'no signs yet — be the first';
-        el.appendChild(none);
+        emptyNote = document.createElement('div');
+        emptyNote.className = 'mpw-gb-note';
+        emptyNote.textContent = 'no signs yet — be the first';
+        entriesBox.appendChild(emptyNote);
+      }
+      function prependEntry(entry, pending) {
+        if (emptyNote) { emptyNote.remove(); emptyNote = null; }
+        entriesBox.prepend(entryRow(entry, pending));
       }
       if (gb.closed) {
         const closed = document.createElement('div');
@@ -216,13 +231,13 @@
         closed.textContent = '📕 the book is closed';
         el.appendChild(closed);
       } else if (gb.onSign) {
-        el.appendChild(buildSignForm(gb));
+        el.appendChild(buildSignForm(gb, prependEntry));
       }
       return el;
     },
   };
 
-  function buildSignForm(gb) {
+  function buildSignForm(gb, onSigned) {
     const form = document.createElement('form');
     form.className = 'mpw-gb-form';
     let nameInput = null;
@@ -256,19 +271,34 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       submit.disabled = true;
+      submit.textContent = 'signing…';
+      const signedName = (gb.signedInAs || (nameInput ? nameInput.value.trim() : '') || 'you').slice(0, 80);
+      const signedBody = body.value;
       try {
-        await gb.onSign({
+        const res = await gb.onSign({
           name: nameInput ? nameInput.value : '',
           body: body.value,
           website: hp.value,
         });
         body.value = '';
         if (nameInput) nameInput.value = '';
-        note.textContent = gb.signedInAs ? 'signed ✓' : 'sent — it’ll show once the owner approves ✓';
+        const entry = res && res.entry;
+        if (entry && entry.status === 'approved') {
+          gb.entries = gb.entries || [];
+          gb.entries.unshift(entry);
+          if (onSigned) onSigned(entry, false);
+          note.textContent = 'signed ✓';
+        } else {
+          // Anonymous sign: show a client-side placeholder so the visitor
+          // sees their note landed; it goes public once the owner approves.
+          if (onSigned) onSigned({ author_name: signedName, body: signedBody, created_at: new Date().toISOString() }, true);
+          note.textContent = 'sent — it’ll show once the owner approves ✓';
+        }
       } catch (err) {
         note.textContent = err.message;
       } finally {
         submit.disabled = false;
+        submit.textContent = 'sign it';
       }
     });
     return form;

@@ -240,7 +240,7 @@
     const box = document.createElement('div');
     box.className = 'mp-draftbar';
     const text = document.createElement('div');
-    text.innerHTML = `<b>✎ You decorated a draft before signing in.</b><br><span class="mp-muted" style="font-size:12.5px;">“${escapeHtml(draft.title)}” is saved on this device — bring it in?</span>`;
+    text.innerHTML = `<b>✏️ You decorated a draft before signing in.</b><br><span class="mp-muted" style="font-size:12.5px;">“${escapeHtml(draft.title)}” is saved on this device — bring it in?</span>`;
     const acts = document.createElement('div');
     acts.className = 'mp-panel-row';
     const imp = document.createElement('button');
@@ -452,7 +452,7 @@
       const resume = document.createElement('button');
       resume.className = 'mp-btn mp-btn-accent';
       resume.style.cssText = 'display:block;margin:18px auto 0;';
-      resume.textContent = `✎ keep decorating “${draft.title}”`;
+      resume.textContent = `✏️ keep decorating “${draft.title}”`;
       resume.addEventListener('click', () => navigate('/make/edit'));
       app.querySelector('#mp-make-resume').appendChild(resume);
     }

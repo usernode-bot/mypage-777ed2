@@ -14,7 +14,9 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body { background: #FAF6EE; color: #1F2B47; font-family: 'Inter', system-ui, sans-serif; }
-    #page { max-width: 720px; margin: 0 auto; min-height: 100vh; box-shadow: 0 0 40px rgba(31,43,71,.08); }
+    /* Full-bleed: section backgrounds span the whole window; blocks stay
+       in the renderer's centered .mp-section-content column. */
+    #page { min-height: 100vh; }
     .v-state { max-width: 420px; margin: 18vh auto 0; text-align: center; padding: 24px; color: #5A6378; }
     .v-state h1 { font-family: 'Fraunces', Georgia, serif; color: #1F2B47; font-size: 22px; }
     .v-state a { color: #B03A7C; font-weight: 700; }

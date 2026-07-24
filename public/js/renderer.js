@@ -157,10 +157,29 @@
     } else if (block.type === 'sticker') {
       const wrap = document.createElement('div');
       wrap.className = 'mp-sticker';
-      const svg = stickerMap[props.key];
-      // Catalog SVG is app-shipped content (seeded by the app itself),
-      // keyed by a whitelist lookup — never user-supplied markup.
-      if (svg) wrap.innerHTML = svg;
+      if (typeof props.emoji === 'string' && props.emoji.trim()) {
+        // Emoji sticker: user-chosen glyph rendered through an SVG built
+        // with createElementNS + textContent — scales like catalog art,
+        // never innerHTML'd.
+        const SVGNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(SVGNS, 'svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('class', 'mp-sticker-emoji');
+        const t = document.createElementNS(SVGNS, 'text');
+        t.setAttribute('x', '50');
+        t.setAttribute('y', '50');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('dominant-baseline', 'central');
+        t.setAttribute('font-size', '76');
+        t.textContent = [...props.emoji.trim()].slice(0, 4).join('');
+        svg.appendChild(t);
+        wrap.appendChild(svg);
+      } else {
+        const svg = stickerMap[props.key];
+        // Catalog SVG is app-shipped content (seeded by the app itself),
+        // keyed by a whitelist lookup — never user-supplied markup.
+        if (svg) wrap.innerHTML = svg;
+      }
       el.appendChild(wrap);
     } else if (block.type === 'widget' && window.MPWidgets) {
       el.appendChild(window.MPWidgets.render(props, ctx || {}));
@@ -168,17 +187,28 @@
     return el;
   }
 
+  // Blocks live inside a centered content column while the section's
+  // background bleeds full width. Returns the column for a section el
+  // (tolerates being handed the column itself, or legacy flat markup).
+  function sectionContent(secEl) {
+    if (!secEl) return null;
+    if (secEl.classList.contains('mp-section-content')) return secEl;
+    return secEl.querySelector(':scope > .mp-section-content') || secEl;
+  }
+
   // Absolute-positioned blocks don't grow their section, so after layout
   // settles we size each section to max(minHeight, deepest block bottom).
+  // Height is set on the content column; the full-bleed wrapper follows.
   function fitSection(secEl) {
-    const rect = secEl.getBoundingClientRect();
+    const inner = sectionContent(secEl);
+    const rect = inner.getBoundingClientRect();
     let need = 0;
-    secEl.querySelectorAll(':scope > .mp-block').forEach((b) => {
+    inner.querySelectorAll(':scope > .mp-block').forEach((b) => {
       const r = b.getBoundingClientRect();
       need = Math.max(need, r.bottom - rect.top);
     });
-    const minH = parseFloat(secEl.dataset.minHeight || '320');
-    secEl.style.height = Math.max(minH, Math.ceil(need) + 28) + 'px';
+    const minH = parseFloat((secEl.dataset && secEl.dataset.minHeight) || inner.dataset.minHeight || '320');
+    inner.style.height = Math.max(minH, Math.ceil(need) + 28) + 'px';
   }
 
   function fitSections(mount) {
@@ -230,13 +260,17 @@
       sec.dataset.si = String(si);
       sec.dataset.minHeight = String(clamp(section.minHeight, 120, 3000, 320));
       applyBg(sec, section.background);
+      // Full-bleed background, blocks in a centered mobile-width column.
+      const inner = document.createElement('div');
+      inner.className = 'mp-section-content';
       const blocks = Array.isArray(section.blocks) ? section.blocks : [];
       blocks.forEach((block, bi) => {
         const el = renderBlock(block, widgetCtx);
         el.dataset.si = String(si);
         el.dataset.bi = String(bi);
-        sec.appendChild(el);
+        inner.appendChild(el);
       });
+      sec.appendChild(inner);
       mount.appendChild(sec);
     });
     if (ctx && ctx.footer) mount.appendChild(renderFooter(doc, ctx));
@@ -250,6 +284,7 @@
     renderBlock,
     fitSection,
     fitSections,
+    sectionContent,
     applyBlockGeometry,
     applyTextProps,
     applyBg,

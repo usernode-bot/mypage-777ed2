@@ -26,7 +26,7 @@
     const c = document.createElement('canvas');
     c.width = c.height = size || 32;
     const g = c.getContext('2d');
-    g.font = Math.round(c.width * 0.85) + 'px serif';
+    g.font = Math.round(c.width * 0.85) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(emoji, c.width / 2, c.height / 2 + 2);
@@ -189,7 +189,7 @@
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'mp-chip mp-chip-btn';
-    clear.textContent = '🗑 clear';
+    clear.textContent = '🗑️ clear';
     clear.addEventListener('click', () => { grid = new Array(1024).fill('.'); paintAll(); });
     palette.append(eraser, clear);
     function mark(active) {

@@ -3,6 +3,9 @@
    two can never drift apart visually. */
 
 .mp-section { position: relative; overflow: hidden; }
+/* Background bleeds full width on the section; blocks live in a centered
+   mobile-friendly column so existing docs keep their exact geometry. */
+.mp-section-content { position: relative; max-width: 720px; margin: 0 auto; }
 .mp-block { position: absolute; }
 .mp-text { white-space: pre-wrap; word-break: break-word; line-height: 1.25; }
 .mp-sticker svg { width: 100%; height: auto; display: block; pointer-events: none; }
@@ -113,6 +116,12 @@
 }
 .mpw-gb-note { font-size: 12px; opacity: .65; }
 .mpw-gb-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.mpw-gb-entry.mpw-gb-entry-pending { opacity: .68; }
+.mpw-gb-wait {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  opacity: .7; margin-left: 8px; border: 1px dashed currentColor; border-radius: 99px;
+  padding: 1px 7px; white-space: nowrap;
+}
 
 /* ----------------------------------------------------------- footer */
 .mp-footer {

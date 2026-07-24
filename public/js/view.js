@@ -163,6 +163,15 @@
     };
     PageRenderer.render(page.content, canvas, ctx);
     MPCursor.apply(page.content && page.content.cursor, document.body);
+
+    // Autoplay the page's song where the browser allows it; MPSong falls
+    // back to the visitor's first gesture when the policy blocks it.
+    const srcUrl = MPSong.sourceUrl(page.content && page.content.song);
+    if (srcUrl) {
+      const playBtn = canvas.querySelector('.mpw-song-play');
+      const disc = canvas.querySelector('.mpw-song-disc');
+      MPSong.autoplay(srcUrl, playBtn, disc);
+    }
   }
 
   async function boot() {
