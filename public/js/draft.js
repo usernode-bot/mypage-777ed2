@@ -7,7 +7,17 @@
 
   const KEY = 'mp_local_draft_v1';
 
+  // An in-memory draft that shadows localStorage without writing to it —
+  // used by the /make?shot=editor screenshot deep link so opening the
+  // editor from a link never plants a phantom draft on someone's device.
+  let ephemeral = null;
+
+  function setEphemeral(draft) {
+    ephemeral = draft && draft.content ? draft : null;
+  }
+
   function load() {
+    if (ephemeral) return ephemeral;
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return null;
@@ -18,6 +28,8 @@
   }
 
   function save(draft) {
+    // A real edit graduates an ephemeral draft into a persisted one.
+    ephemeral = null;
     try {
       localStorage.setItem(KEY, JSON.stringify({
         title: draft.title,
@@ -31,8 +43,9 @@
   }
 
   function clear() {
+    ephemeral = null;
     try { localStorage.removeItem(KEY); } catch {}
   }
 
-  window.MPDraft = { load, save, clear };
+  window.MPDraft = { load, save, clear, setEphemeral };
 })();

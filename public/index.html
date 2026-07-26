@@ -63,6 +63,35 @@
     try { post('info', ['[dev-console ready]'], { kind: 'ready' }); } catch (_) {}
   })();
   </script>
+
+  <script>
+  // Appearance boot — blocking on purpose so dark users never see a white
+  // flash. Duplicated verbatim in view.html; /js/theme.js is the source of
+  // truth for the signal contract (html.dark + data-theme + data-theme-mode).
+  (function () {
+    var MODES = ['light', 'dark', 'system'];
+    var mode = null;
+    try {
+      var q = new URLSearchParams(location.search).get('theme');
+      // ?theme=… is a deep-link override for this load only — never persisted.
+      if (MODES.indexOf(q) >= 0) { mode = q; window.__mpThemeOverride = q; }
+    } catch (_) {}
+    if (!mode) {
+      try {
+        var v = localStorage.getItem('mp_theme');
+        if (MODES.indexOf(v) >= 0) mode = v;
+      } catch (_) {}
+    }
+    if (!mode) mode = 'system';
+    var dark = mode === 'dark' || (mode === 'system'
+      && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var root = document.documentElement;
+    if (dark) root.classList.add('dark');
+    root.setAttribute('data-theme', dark ? 'dark' : 'light');
+    root.setAttribute('data-theme-mode', mode);
+  })();
+  </script>
+
   <title>MyPage</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FAF6EE'/><text x='50' y='68' font-size='52' text-anchor='middle'>✨</text></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -75,12 +104,52 @@
   <link rel="stylesheet" href="/css/page.css">
   <style>
     /* Series brand: paper/ink/brass, rose accent. The chrome stays quiet
-       because the user pages are loud — the editor is a neutral workshop. */
+       because the user pages are loud — the editor is a neutral workshop.
+
+       Every chrome colour routes through a token here so the html.dark block
+       below can swap the whole workshop without touching a single rule.
+       --ink/--paper are SEMANTIC (foreground/background), so inverting their
+       values is what makes .mp-btn / .mp-tab-on / .mp-chip-on correct in dark
+       for free. Page documents are NOT themed — see page.css. */
     :root {
       --paper: #FAF6EE; --paper-deep: #F3EDDF; --ink: #1F2B47;
       --ink-soft: #5A6378; --line: #E7DFCC;
-      --accent: #D65A9E; --accent-deep: #B03A7C;
+      --accent: #D65A9E; --accent-deep: #B03A7C; --accent-contrast: #ffffff;
+      --surface: #ffffff; --surface-raised: #FFFDF8;
+      --tint-accent: #FFF7FC; --tint-warm: #FFF7E8;
+      --ok: #4D7325;
+      --danger: #C0392B; --danger-line: #E5B4AE; --danger-solid: #C0392B;
+      --warn-bg: #FDECEA; --warn-fg: #922B21; --warn-line: #F5B7B1;
+      --info-fg: #7A5A1E; --info-line: #F0DFB8;
+      --scrim: rgba(31,43,71,.45);
+      --topbar-bg: rgba(250,246,238,.94);
+      --hairline: rgba(31,43,71,.18);
+      --shadow-card: rgba(31,43,71,.04);
+      --shadow-modal: rgba(0,0,0,.25);
+      /* Affordances that sit ON the page canvas. The canvas never darkens
+         (it is a faithful preview of the published page), so these are
+         deliberately NOT overridden in dark mode. */
+      --canvas-accent: #D65A9E; --canvas-accent-deep: #B03A7C;
       --un-accent: #D65A9E;
+      color-scheme: light;
+    }
+    html.dark {
+      --paper: #14192A; --paper-deep: #1D2438; --ink: #ECE6DA;
+      --ink-soft: #A2A9BC; --line: #2E3752;
+      --accent: #E87BB4; --accent-deep: #F2A3CD; --accent-contrast: #2A0E1E;
+      --surface: #1A2033; --surface-raised: #202840;
+      --tint-accent: #2A1A2A; --tint-warm: #2A2418;
+      --ok: #8FBF5A;
+      --danger: #F08A7D; --danger-line: #6A3129; --danger-solid: #B8382B;
+      --warn-bg: #3A1A18; --warn-fg: #F3B4AC; --warn-line: #5A2A26;
+      --info-fg: #E3C88A; --info-line: #4A3D22;
+      --scrim: rgba(4,7,14,.66);
+      --topbar-bg: rgba(20,25,42,.92);
+      --hairline: rgba(236,230,218,.16);
+      --shadow-card: rgba(0,0,0,.22);
+      --shadow-modal: rgba(0,0,0,.5);
+      --un-accent: #E87BB4; --un-accent-contrast: #2A0E1E;
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -103,8 +172,8 @@
       background: var(--ink); color: var(--paper); font-weight: 700; font-size: 14px;
       border-radius: 12px; padding: 10px 16px;
     }
-    .mp-btn-accent { background: var(--accent); color: #fff; }
-    .mp-btn-danger { background: #C0392B; color: #fff; }
+    .mp-btn-accent { background: var(--accent); color: var(--accent-contrast); }
+    .mp-btn-danger { background: var(--danger-solid); color: #fff; }
     .mp-btn-sm { padding: 7px 13px; font-size: 13px; border-radius: 10px; }
     .mp-iconbtn { font-size: 20px; padding: 6px 10px; border-radius: 10px; color: var(--ink); }
 
@@ -114,6 +183,15 @@
       padding: calc(18px + env(safe-area-inset-top)) 18px 12px;
       max-width: 720px; margin: 0 auto;
     }
+    .mp-home-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+    /* Appearance control — same round chip on home, directory and /make. */
+    .mp-themebtn {
+      display: inline-grid; place-items: center; flex: none;
+      width: 38px; height: 38px; border-radius: 50%; font-size: 17px; line-height: 1;
+      background: var(--surface); border: 1.5px solid var(--line); color: var(--ink);
+    }
+    .mp-themebtn:active { border-color: var(--accent); }
+    .mp-door-sub { font-size: 11px; color: var(--ink-soft); font-weight: 600; }
     .mp-tabs {
       display: flex; gap: 4px; max-width: 720px; margin: 0 auto; padding: 0 18px 0;
       border-bottom: 2.5px solid var(--ink);
@@ -125,20 +203,22 @@
     .mp-tab-on { background: var(--ink); color: var(--paper); }
     .mp-home { max-width: 720px; margin: 0 auto; padding: 14px 18px calc(40px + env(safe-area-inset-bottom)); }
     .mp-make { max-width: 480px; margin: 0 auto; padding: calc(40px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom)); }
+    .mp-make-top { display: flex; justify-content: flex-end; margin-bottom: 4px; }
     .mp-sect-label { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; margin: 12px 2px 8px; }
     .mp-card-list { display: flex; flex-direction: column; gap: 10px; }
     .mp-card {
       display: block; width: 100%; text-align: left;
-      background: #fff; border: 1px solid var(--line); border-radius: 16px;
-      padding: 14px 16px; box-shadow: 0 1px 0 rgba(31,43,71,.04); margin-bottom: 10px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px 16px; box-shadow: 0 1px 0 var(--shadow-card); margin-bottom: 10px;
     }
-    .mp-card-gift { border: 1.5px dashed var(--accent); background: #FFF7FC; }
+    .mp-card-gift { border: 1.5px dashed var(--accent); background: var(--tint-accent); }
     .mp-card-row1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .mp-card-title { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 17.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mp-card-row2 { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .mp-status-pub { color: #4D7325; font-weight: 600; }
+    .mp-status-pub { color: var(--ok); font-weight: 600; }
     .mp-status-draft { color: var(--accent-deep); font-weight: 600; }
-    .mp-badge { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 9px; }
+    .mp-badge { background: var(--accent); color: var(--accent-contrast); font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 9px; }
+    .mp-badge-danger { background: var(--danger-solid); color: #fff; }
     .mp-chip {
       display: inline-flex; align-items: center; gap: 4px; flex: none;
       font-size: 12px; font-weight: 600; color: var(--ink-soft);
@@ -148,7 +228,7 @@
     .mp-empty-art { font-size: 34px; margin-bottom: 12px; }
     .mp-draftbar {
       display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-      background: #FFF7E8; border: 1.5px dashed var(--accent-deep); border-radius: 14px;
+      background: var(--tint-warm); border: 1.5px dashed var(--accent-deep); border-radius: 14px;
       padding: 12px 14px; margin: 12px 0; font-size: 13.5px;
     }
 
@@ -157,8 +237,8 @@
     .mp-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
     .mp-dir-card {
       display: block; text-decoration: none; color: inherit;
-      background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
-      box-shadow: 0 1px 0 rgba(31,43,71,.04);
+      background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+      box-shadow: 0 1px 0 var(--shadow-card);
     }
     .mp-dir-preview {
       height: 96px; display: flex; align-items: center; padding: 10px 12px; overflow: hidden;
@@ -170,25 +250,25 @@
 
     /* ------------------------------------------------------------ modal */
     .mp-backdrop {
-      position: fixed; inset: 0; background: rgba(31,43,71,.45); z-index: 70;
+      position: fixed; inset: 0; background: var(--scrim); z-index: 70;
       display: grid; place-items: center; padding: 18px;
     }
     .mp-modal {
-      background: #FFFDF8; border-radius: 18px; width: 100%; max-width: 440px;
+      background: var(--surface-raised); border-radius: 18px; width: 100%; max-width: 440px;
       max-height: 84vh; overflow: auto; padding: 20px;
-      box-shadow: 0 18px 50px rgba(0,0,0,.25);
+      box-shadow: 0 18px 50px var(--shadow-modal);
     }
     .mp-modal-title { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 20px; margin: 0 0 12px; }
     .mp-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
     .mp-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; margin: 12px 0 6px; }
     .mp-input {
-      width: 100%; background: #fff; border: 1.5px solid var(--line); border-radius: 10px;
+      width: 100%; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px;
       padding: 10px 12px; font: inherit; color: var(--ink); outline: none;
     }
     .mp-input:focus { border-color: var(--accent); }
-    .mp-input-bad { border-color: #C0392B; }
+    .mp-input-bad { border-color: var(--danger); }
     .mp-textarea { min-height: 130px; resize: vertical; white-space: pre-wrap; }
-    .mp-form-err { color: #C0392B; font-size: 12.5px; min-height: 16px; margin: 6px 0 0; }
+    .mp-form-err { color: var(--danger); font-size: 12.5px; min-height: 16px; margin: 6px 0 0; }
     .mp-slug-row { display: flex; align-items: center; gap: 6px; }
     .mp-slug-prefix { font-family: monospace; color: var(--ink-soft); font-size: 15px; }
     .mp-linkbox {
@@ -207,7 +287,7 @@
     .mp-doors .mp-door:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .mp-menurow {
       display: block; width: 100%; text-align: left; font-weight: 600; font-size: 14.5px;
-      padding: 12px 4px; border-bottom: 1px solid var(--paper-deep);
+      padding: 12px 4px; border-bottom: 1px solid var(--line);
     }
     .mp-mini-toast {
       position: fixed; left: 50%; bottom: calc(30px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -220,7 +300,7 @@
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; gap: 8px;
       padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-      background: rgba(250,246,238,.94); backdrop-filter: blur(10px);
+      background: var(--topbar-bg); backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--line);
     }
     .mp-topbar-title {
@@ -236,18 +316,17 @@
     .mp-toolstrip::-webkit-scrollbar { display: none; }
     .mp-warnbar, .mp-infobar {
       max-width: 720px; margin: 0 auto; padding: 9px 16px; font-size: 12.5px;
-      background: #FDECEA; color: #922B21; border-bottom: 1px solid #F5B7B1;
+      background: var(--warn-bg); color: var(--warn-fg); border-bottom: 1px solid var(--warn-line);
     }
-    .mp-infobar { background: #FFF7E8; color: #7A5A1E; border-color: #F0DFB8; }
+    .mp-infobar { background: var(--tint-warm); color: var(--info-fg); border-color: var(--info-line); }
     /* Full-bleed canvas: section backgrounds span the editor's whole
        width; blocks live in the renderer's centered content column. A
        light dashed edge marks the editing column while editing. */
     #mp-canvas-wrap { margin: 0 auto; }
     #mp-canvas { min-height: 200px; }
-    #mp-canvas.mp-editing .mp-section-content {
-      border-left: 1px dashed rgba(31,43,71,.18);
-      border-right: 1px dashed rgba(31,43,71,.18);
-    }
+    /* Dark chrome / light canvas: a hairline ring makes the canvas read as
+       "the page" rather than a broken panel. */
+    html.dark #mp-canvas { box-shadow: 0 0 0 1px var(--line); }
     /* 👁️ preview mode — hide every editing affordance */
     body.mp-previewing #mp-toolstrip,
     body.mp-previewing #mp-panel,
@@ -259,7 +338,7 @@
     }
     .mp-panel {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
-      background: #FFFDF8; border-top: 1px solid var(--line);
+      background: var(--surface-raised); border-top: 1px solid var(--line);
       padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
       display: flex; flex-direction: column; gap: 8px;
       max-width: 720px; margin: 0 auto;
@@ -267,14 +346,14 @@
     .mp-panel-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
     .mp-panel-row::-webkit-scrollbar { display: none; }
     .mp-panel-hint { justify-content: center; font-size: 12.5px; padding: 4px 0; }
-    .mp-chip-btn { border: 1px solid var(--line); background: #fff; }
+    .mp-chip-btn { border: 1px solid var(--line); background: var(--surface); }
     .mp-chip-on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-    .mp-chip-strong { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .mp-chip-danger { color: #C0392B; border-color: #E5B4AE; }
+    .mp-chip-strong { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+    .mp-chip-danger { color: var(--danger); border-color: var(--danger-line); }
     .mp-slider { flex: 1; min-width: 110px; accent-color: var(--accent); }
     .mp-swatch {
       width: 26px; height: 26px; border-radius: 50%; flex: none;
-      border: 1.5px solid rgba(31,43,71,.18); padding: 0; cursor: pointer;
+      border: 1.5px solid var(--hairline); padding: 0; cursor: pointer;
     }
     .mp-swatch-on { outline: 2px solid var(--accent); outline-offset: 2px; }
     .mp-swatch-custom { border-radius: 8px; width: 34px; }
@@ -286,25 +365,27 @@
     .mp-emoji-cell:active { background: var(--paper-deep); }
     .mp-emoji-mount { max-height: 40vh; overflow-y: auto; }
     .mp-sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 6px; }
-    .mp-sticker-cell { padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+    .mp-sticker-cell { padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
     .mp-sticker-cell svg { width: 100%; height: auto; display: block; }
     .mp-vibe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .mp-vibe-cell { text-align: left; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+    .mp-vibe-cell { text-align: left; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
     .mp-vibe-preview { height: 52px; }
     .mp-vibe-name { font-weight: 800; font-size: 13.5px; padding: 7px 10px 0; }
     .mp-vibe-desc { font-size: 11px; color: var(--ink-soft); padding: 0 10px 9px; }
-    .mp-footer-swatch { border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: 800; border: 1px solid rgba(31,43,71,.15); }
+    .mp-footer-swatch { border-radius: 10px; padding: 10px 12px; font-size: 12px; font-weight: 800; border: 1px solid var(--hairline); }
     .mp-src-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
     .mp-src-row { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--line); border-radius: 10px; padding: 4px 8px; }
-    .mp-src-on { border-color: var(--accent); background: #FFF7FC; }
+    .mp-src-on { border-color: var(--accent); background: var(--tint-accent); }
     .mp-src-pick { flex: 1; text-align: left; font-size: 13.5px; font-weight: 600; padding: 6px 2px; }
-    .mp-gbm-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--paper-deep); }
-    .mp-gbm-pending { background: #FFF7E8; margin: 0 -8px; padding: 10px 8px; border-radius: 10px; }
+    .mp-gbm-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .mp-gbm-pending { background: var(--tint-warm); margin: 0 -8px; padding: 10px 8px; border-radius: 10px; }
     .mp-gbm-acts { display: flex; gap: 6px; flex: none; }
     .mp-pixel-editor { display: flex; flex-direction: column; gap: 10px; }
     .mp-pixel-canvas {
       width: 100%; max-width: 288px; aspect-ratio: 1; margin: 0 auto;
       image-rendering: pixelated; touch-action: none; cursor: crosshair;
+      /* Literal checkerboard: it depicts TRANSPARENCY in the drawing, not
+         chrome — it must not follow the theme. */
       background:
         conic-gradient(#eee 25%, #fff 0 50%, #eee 0 75%, #fff 0) 0 0 / 18px 18px;
       border: 1.5px solid var(--line); border-radius: 8px;
@@ -312,12 +393,20 @@
     .mp-pixel-palette { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 
     /* --------------------------------------------- editing affordances */
+    /* These float ON TOP of the page canvas, which never darkens (it is a
+       faithful preview of the published page). They use the fixed
+       --canvas-accent tokens on purpose — do NOT route them through
+       --accent / --surface, or a dark handle lands on a light page. */
     .mp-editing .mp-block { touch-action: none; cursor: grab; }
     .mp-editing .mp-block:active { cursor: grabbing; }
-    .mp-block.mp-selected { outline: 2px dashed var(--accent); outline-offset: 5px; border-radius: 4px; }
+    .mp-block.mp-selected { outline: 2px dashed var(--canvas-accent); outline-offset: 5px; border-radius: 4px; }
+    #mp-canvas.mp-editing .mp-section-content {
+      border-left: 1px dashed rgba(31,43,71,.18);
+      border-right: 1px dashed rgba(31,43,71,.18);
+    }
     .mp-handle {
       position: absolute; width: 28px; height: 28px; border-radius: 50%;
-      background: #fff; border: 2px solid var(--accent); color: var(--accent-deep);
+      background: #fff; border: 2px solid var(--canvas-accent); color: var(--canvas-accent-deep);
       display: grid; place-items: center; font-size: 14px; z-index: 300;
       box-shadow: 0 2px 6px rgba(0,0,0,.22); touch-action: none;
     }
@@ -327,11 +416,15 @@
       position: absolute; top: 8px; right: 8px; z-index: 250;
       display: flex; gap: 6px;
     }
-    .mp-section-bar .mp-chip-btn { background: rgba(255,253,248,.92); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+    .mp-section-bar .mp-chip-btn {
+      background: rgba(255,253,248,.92); color: #1F2B47; border-color: rgba(31,43,71,.18);
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
   </style>
 </head>
 <body>
   <div id="app"></div>
+  <script src="/js/theme.js"></script>
   <script src="/js/renderer.js"></script>
   <script src="/js/widgets.js"></script>
   <script src="/js/cursor.js"></script>

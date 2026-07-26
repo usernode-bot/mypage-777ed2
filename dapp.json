@@ -8,6 +8,10 @@
     { "name": "Full-bleed sections render", "path": "/p/staging-demo-corner", "expectSelector": ".mp-section .mp-section-content" },
     { "name": "Emoji sticker renders", "path": "/p/staging-demo-corner", "expectSelector": ".mp-sticker svg.mp-sticker-emoji" },
     { "name": "Directory gallery renders", "path": "/directory", "expectSelector": "[data-testid=directory]" },
-    { "name": "Account-less make-your-own loads", "path": "/make", "expectSelector": "[data-testid=make-start]" }
+    { "name": "Account-less make-your-own loads", "path": "/make", "expectSelector": "[data-testid=make-start]" },
+    { "name": "Theme toggle renders", "path": "/", "expectSelector": "[data-testid=theme-toggle]" },
+    { "name": "Dark chrome renders", "path": "/?theme=dark", "expectSelector": "html.dark [data-testid=my-pages]" },
+    { "name": "Public page chrome honours dark", "path": "/p/staging-demo-corner?theme=dark", "expectSelector": "html.dark [data-testid=page-view]" },
+    { "name": "Editor chrome renders dark", "path": "/make?shot=editor&theme=dark", "expectSelector": "html.dark [data-testid=editor-canvas]" }
   ]
 }

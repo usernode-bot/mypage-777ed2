@@ -130,6 +130,91 @@
     renderMyPages();
   }
 
+  // Screenshot-state deep link: the editor's chrome can't be reached by
+  // navigation (the seeded demo pages belong to another user), so
+  // /make?shot=editor drops a FIXED demo document into an in-memory draft
+  // and opens the account-less editor on it. Deliberately ephemeral — a
+  // persisted draft would plant a phantom "keep decorating" banner for
+  // anyone who follows the link. No DB writes, so it works in every env.
+  const SHOT_DOC = {
+    version: 1, cursor: null, song: null, footerStyle: null,
+    sections: [{
+      id: 's-shot01',
+      minHeight: 480,
+      background: { type: 'gradient', from: '#FDF3F9', to: '#EFE7FB', angle: 160 },
+      blocks: [
+        {
+          id: 'b-shot01', type: 'text', x: 8, y: 56, w: 84, rotation: -2, z: 1,
+          props: { text: 'Staging demo draft', font: 'fraunces', size: 34, color: '#1F2B47', bold: true, align: 'left', style: 'none' },
+        },
+        {
+          id: 'b-shot02', type: 'text', x: 10, y: 150, w: 76, rotation: 1, z: 2,
+          props: { text: 'decorating in the dark ✨', font: 'hand', size: 26, color: '#6B4E9E', bold: false, align: 'left', style: 'none' },
+        },
+      ],
+    }],
+  };
+
+  function shotEditor() {
+    if (!window.MPDraft || !MPDraft.setEphemeral) return false;
+    MPDraft.setEphemeral({
+      title: 'Staging demo draft', subject_type: 'self', subject_name: null, content: SHOT_DOC,
+    });
+    navigate('/make/edit', true);
+    return true;
+  }
+
+  // ------------------------------------------------------------- appearance
+
+  // The appearance control: one round chip in the app's own header (My Pages,
+  // Directory, /make). The editor puts it in the ⋯ menu instead — its top bar
+  // is already full. Icon shows what's IN EFFECT, not what's chosen.
+  function themeButton() {
+    const emoji = window.MPTheme ? MPTheme.LABELS[MPTheme.resolved()].emoji : '☀️';
+    return `<button id="mp-theme-btn" class="mp-themebtn un-touch-target" data-testid="theme-toggle"
+      aria-label="Appearance" title="Appearance">${emoji}</button>`;
+  }
+
+  function wireThemeButton(scope) {
+    const btn = (scope || document).querySelector('#mp-theme-btn');
+    if (btn) btn.addEventListener('click', () => openAppearance());
+  }
+
+  function openAppearance() {
+    const content = document.createElement('div');
+    const doors = document.createElement('div');
+    doors.className = 'mp-doors';
+    let ctl;
+    const current = MPTheme.mode();
+    ['light', 'dark', 'system'].forEach((m) => {
+      const meta = MPTheme.LABELS[m];
+      const door = document.createElement('button');
+      door.className = 'mp-door' + (current === m ? ' mp-door-on' : '');
+      door.dataset.themeMode = m;
+      door.innerHTML = `<span class="mp-door-emoji">${meta.emoji}</span><span>${meta.name}</span>`;
+      door.addEventListener('click', () => {
+        MPTheme.set(m);
+        ctl.close();
+        toast(m === 'system' ? 'Following your device' : m === 'dark' ? 'Dark mode on' : 'Light mode on');
+      });
+      doors.appendChild(door);
+    });
+    const note = document.createElement('p');
+    note.className = 'mp-muted';
+    note.style.cssText = 'font-size:12.5px;margin:12px 2px 0;';
+    note.textContent = 'System follows your phone or computer’s own light/dark setting. Pages you make keep their own colours either way.';
+    content.append(doors, note);
+    ctl = openModal({ title: '🌗 Appearance', contentEl: content, actions: [{ label: 'Close' }] });
+  }
+
+  // Re-label in place so a live OS change (or a pick) doesn't need a re-render.
+  if (window.MPTheme) {
+    MPTheme.subscribe((resolvedTheme) => {
+      const btn = document.getElementById('mp-theme-btn');
+      if (btn) btn.textContent = MPTheme.LABELS[resolvedTheme].emoji;
+    });
+  }
+
   // ------------------------------------------------------------ page header
 
   function header(active) {
@@ -140,9 +225,12 @@
           <div class="mp-kicker">your corner of the internet</div>
           <h1 class="mp-wordmark">MyPage</h1>
         </div>
-        ${canMake
-          ? '<button id="mp-new-btn" class="mp-btn mp-btn-accent">＋ New page</button>'
-          : '<a href="/make" data-nav="/make" class="mp-btn mp-btn-accent" style="text-decoration:none;">＋ make your own</a>'}
+        <div class="mp-home-actions">
+          ${themeButton()}
+          ${canMake
+            ? '<button id="mp-new-btn" class="mp-btn mp-btn-accent">＋ New page</button>'
+            : '<a href="/make" data-nav="/make" class="mp-btn mp-btn-accent" style="text-decoration:none;">＋ make your own</a>'}
+        </div>
       </header>
       <nav class="mp-tabs">
         ${token ? `<button class="mp-tab${active === 'mine' ? ' mp-tab-on' : ''}" data-nav="/">My Pages</button>` : ''}
@@ -154,6 +242,7 @@
     app.querySelectorAll('[data-nav]').forEach((el) => {
       el.addEventListener('click', (e) => { e.preventDefault(); navigate(el.dataset.nav); });
     });
+    wireThemeButton(app);
     const newBtn = app.querySelector('#mp-new-btn');
     if (newBtn) newBtn.addEventListener('click', () => openChooser(false));
   }
@@ -219,7 +308,7 @@
       const visits = Number(p.visits) > 0 ? ` · ${Number(p.visits)} visits` : '';
       const pending = p.pending_signs > 0
         ? `<span class="mp-badge">${p.pending_signs} sign${p.pending_signs === 1 ? '' : 's'} to approve</span>` : '';
-      const delisted = p.directory_delisted_by_report ? '<span class="mp-badge" style="background:#C0392B;">reported</span>' : '';
+      const delisted = p.directory_delisted_by_report ? '<span class="mp-badge mp-badge-danger">reported</span>' : '';
       card.innerHTML = `
         <div class="mp-card-row1">
           <span class="mp-card-title">${escapeHtml(p.title)}</span>
@@ -292,7 +381,7 @@
     preview.href = '/claim/' + encodeURIComponent(g.token);
     preview.target = '_blank';
     preview.textContent = 'peek at the page first ↗';
-    preview.style.cssText = 'font-size:13px;color:#B03A7C;font-weight:700;';
+    preview.style.cssText = 'font-size:13px;color:var(--accent-deep);font-weight:700;';
     content.appendChild(preview);
     const claim = async (mode, ctl, btn) => {
       btn.disabled = true;
@@ -437,16 +526,18 @@
     const app = document.getElementById('app');
     app.innerHTML = `
       <main class="mp-make" data-testid="make-start">
+        <div class="mp-make-top">${themeButton()}</div>
         <div class="mp-kicker" style="text-align:center;">no account needed to decorate</div>
         <h1 class="mp-wordmark" style="text-align:center;font-size:34px;">make your own</h1>
         <p class="mp-muted" style="text-align:center;max-width:340px;margin:6px auto 20px;">a small loud page — for yourself, a friend, your pet, your OC, or your comfort character. it saves on this device; an account only matters when you publish.</p>
         <div class="mp-doors" id="mp-make-doors"></div>
         <div id="mp-make-resume"></div>
-        <p style="text-align:center;margin-top:26px;"><a href="/directory" data-nav="/directory" style="color:#B03A7C;font-weight:700;font-size:13.5px;">or wander the directory →</a></p>
+        <p style="text-align:center;margin-top:26px;"><a href="/directory" data-nav="/directory" style="color:var(--accent-deep);font-weight:700;font-size:13.5px;">or wander the directory →</a></p>
       </main>`;
     app.querySelectorAll('[data-nav]').forEach((el) => {
       el.addEventListener('click', (e) => { e.preventDefault(); navigate(el.dataset.nav); });
     });
+    wireThemeButton(app);
 
     if (draft) {
       const resume = document.createElement('button');
@@ -553,7 +644,14 @@
     if (first) setTimeout(() => first.focus(), 60);
   }
 
-  window.MP = { api, navigate, escapeHtml, timeAgo, slugify, toast, openModal, SUBJECTS, renderMyPages };
+  window.MP = {
+    api, navigate, escapeHtml, timeAgo, slugify, toast, openModal, SUBJECTS,
+    renderMyPages, openAppearance,
+  };
 
-  route();
+  if (params.get('shot') === 'editor' && shotEditor()) {
+    // shotEditor() already routed.
+  } else {
+    route();
+  }
 })();

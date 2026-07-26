@@ -1051,6 +1051,11 @@
       b.addEventListener('click', () => { ctl.close(); fn(); });
       content.appendChild(b);
     };
+    // The editor's top bar is full (← / title / save / 👁️ / ⋯ / Publish), so
+    // the appearance control lives here instead. Applies to the whole app.
+    if (window.MPTheme) {
+      mkRow('🌗 appearance — ' + MPTheme.LABELS[MPTheme.mode()].name, () => MP.openAppearance());
+    }
     if (!isLocal) {
       if (page.published) {
         mkRow('↗ open the public page', () => window.open('/p/' + page.slug, '_blank'));
