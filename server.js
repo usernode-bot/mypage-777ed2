@@ -8,7 +8,7 @@ const CATALOG = require('./lib/catalog');
 const app = express();
 const port = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const JWT_SECRET = process.env.JWT_SECRET;
+const USERNODE_JWT_PUBLIC_KEY = process.env.USERNODE_JWT_PUBLIC_KEY;
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 
 // Paths that stay open without authentication. Add a path here (and add it
@@ -30,8 +30,15 @@ app.use(express.json({ limit: '8mb' }));
 // on subsequent fetches.
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
-  if (token && JWT_SECRET) {
-    try { req.user = jwt.verify(token, JWT_SECRET); } catch {}
+  if (token && USERNODE_JWT_PUBLIC_KEY) {
+    try {
+      const payload = jwt.verify(token, USERNODE_JWT_PUBLIC_KEY, {
+        algorithms: ['RS256'],
+        issuer: 'usernode',
+        audience: 'usernode:app:' + process.env.USERNODE_APP_ID,
+      });
+      if (payload.pur === 'iframe') req.user = payload;
+    } catch {}
   }
 
   // Static assets (CSS/JS/images) are always served; the API and the HTML
