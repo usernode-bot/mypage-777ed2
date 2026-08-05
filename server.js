@@ -52,7 +52,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health', (_req, res) => {
+  if (shuttingDown) return res.status(503).json({ status: 'shutting down' });
+  res.json({ status: 'ok' });
+});
 
 // The template ships no favicon file; index.html carries an inline SVG
 // icon instead. Answer 204 here so anything that still probes
@@ -70,6 +73,7 @@ const SLUG_RE = /^[a-z0-9-]{3,30}$/;
 const RESERVED_SLUGS = new Set([
   'api', 'assets', 'audio', 'claim', 'css', 'directory', 'edit', 'health',
   'js', 'make', 'new', 'p', 'page', 'pages', 'staging', 'admin',
+  'templates', 'discover', 'home',
 ]);
 const REPORT_REASONS = new Set(['impersonation', 'i_am_the_subject', 'other']);
 
@@ -266,8 +270,9 @@ app.post('/api/public/pages/:slug/guestbook', async (req, res) => {
   }
 });
 
-// FanPages directory: a gallery to wander, not a feed. Recency or shuffle,
-// filtered by subject, honoring per-page opt-out and report delisting.
+// Discover (the directory): a gallery to wander, not a feed. Recency or
+// shuffle, filtered by subject, searchable by title/creator, honoring
+// per-page opt-out and report delisting.
 app.get('/api/public/directory', async (req, res) => {
   try {
     const subject = SUBJECT_TYPES.has(req.query.subject) ? req.query.subject : null;
@@ -275,9 +280,14 @@ app.get('/api/public/directory', async (req, res) => {
     const params = [];
     let where = `p.published = TRUE AND p.directory_listed = TRUE AND p.directory_delisted_by_report = FALSE`;
     if (subject) { params.push(subject); where += ` AND p.subject_type = $${params.length}`; }
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
+    if (q) {
+      params.push('%' + q.replace(/[%_\\]/g, '\\$&') + '%');
+      where += ` AND (p.title ILIKE $${params.length} OR p.made_by_username ILIKE $${params.length})`;
+    }
     const { rows } = await pool.query(
       `SELECT p.slug, p.title, p.subject_type, p.made_by_username, p.made_for_name,
-              p.content->'sections'->0 AS first_section,
+              p.content->'sections'->0 AS first_section, p.updated_at,
               COALESCE(v.total, 0)::bigint AS visits
        FROM pages p LEFT JOIN page_visits v ON v.page_id = p.id
        WHERE ${where} ORDER BY ${order} LIMIT 60`,
@@ -294,7 +304,8 @@ app.get('/api/public/directory', async (req, res) => {
 app.get('/api/public/catalog', async (_req, res) => {
   try {
     const [templates, packs, stickers, cursors, music] = await Promise.all([
-      pool.query(`SELECT key, name, description, content FROM vibe_templates ORDER BY id`),
+      pool.query(`SELECT key, name, description, content, featured, subject_type, tagline, steps
+                  FROM vibe_templates ORDER BY featured DESC, id`),
       pool.query(`SELECT id, key, name FROM sticker_packs ORDER BY id`),
       pool.query(`SELECT pack_id, key, svg FROM stickers ORDER BY id`),
       pool.query(`SELECT key, name, config FROM cursor_presets ORDER BY id`),
@@ -699,6 +710,9 @@ app.get('/claim/:token', (_req, res) => res.sendFile(VIEW_HTML));
 // comes only from /api/public/* (or localStorage) until the user signs in.
 app.get('/make', (_req, res) => res.sendFile(INDEX_HTML));
 app.get('/directory', (_req, res) => res.sendFile(INDEX_HTML));
+app.get('/discover', (_req, res) => res.sendFile(INDEX_HTML));
+app.get('/templates', (_req, res) => res.sendFile(INDEX_HTML));
+app.get('/pages', (_req, res) => res.sendFile(INDEX_HTML));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -815,6 +829,10 @@ async function migrate() {
       description VARCHAR(200),
       content JSONB NOT NULL
     );
+    ALTER TABLE vibe_templates ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE vibe_templates ADD COLUMN IF NOT EXISTS subject_type TEXT;
+    ALTER TABLE vibe_templates ADD COLUMN IF NOT EXISTS tagline TEXT;
+    ALTER TABLE vibe_templates ADD COLUMN IF NOT EXISTS steps JSONB;
 
     CREATE TABLE IF NOT EXISTS sticker_packs (
       id SERIAL PRIMARY KEY,
@@ -852,9 +870,13 @@ async function migrate() {
 async function seedCatalog() {
   for (const t of CATALOG.TEMPLATES) {
     await pool.query(
-      `INSERT INTO vibe_templates (key, name, description, content) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (key) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, content = EXCLUDED.content`,
-      [t.key, t.name, t.description, JSON.stringify(t.content)]
+      `INSERT INTO vibe_templates (key, name, description, content, featured, subject_type, tagline, steps)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (key) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description,
+         content = EXCLUDED.content, featured = EXCLUDED.featured, subject_type = EXCLUDED.subject_type,
+         tagline = EXCLUDED.tagline, steps = EXCLUDED.steps`,
+      [t.key, t.name, t.description, JSON.stringify(t.content), !!t.featured,
+       t.subject_type || null, t.tagline || null, t.steps ? JSON.stringify(t.steps) : null]
     );
   }
   for (const pack of CATALOG.STICKER_PACKS) {
@@ -976,10 +998,23 @@ const SEED_DOCS = {
 // the table is staging:private, so staging gets schema only.
 const STAGING_GIFT_TOKEN = 'staging-demo-gift-000000000001';
 
+// The flagship starter templates double as staging demo pages, so Home's
+// featured rail, the Templates gallery, Discover cards and the new widgets
+// (status/quote/list/playlist/album/popup + frames) all render against
+// real published rows in every staging preview.
+const flagshipDoc = (key) => {
+  const t = CATALOG.TEMPLATES.find((x) => x.key === key);
+  return t ? t.content : null;
+};
+
 async function seedStaging() {
   const DEMO_USER_ID = 900001;
   const DEMO_USERNAME = 'staging-demo-user';
   const pages = [
+    { id: 900007, slug: 'staging-scene-demo', title: 'staging demo — scene page', type: 'self', name: DEMO_USERNAME, madeFor: null, doc: flagshipDoc('scene-page'), published: true, footer: { bg: '#5A4A38', color: '#F3E9DC' } },
+    { id: 900008, slug: 'staging-bestie-demo', title: 'staging demo — bestie page', type: 'friend', name: 'staging-demo-friend', madeFor: 'staging-demo-friend', doc: flagshipDoc('bestie-page'), published: true, footer: { bg: '#B03A7C', color: '#FFD9F2' } },
+    { id: 900009, slug: 'staging-y2k-demo', title: 'staging demo — y2k page', type: 'self', name: DEMO_USERNAME, madeFor: null, doc: flagshipDoc('y2k-page'), published: true, footer: { bg: '#D9DDE3', color: '#31384A' } },
+    { id: 900010, slug: 'staging-pet-demo', title: 'staging demo — pet fan page', type: 'pet', name: 'Beans', madeFor: 'Beans', doc: flagshipDoc('pet-fan-page'), published: true, footer: { bg: '#31384A', color: '#DCE9F7' } },
     { id: 900001, slug: 'staging-demo-corner', title: 'staging demo corner', type: 'self', name: DEMO_USERNAME, madeFor: null, doc: SEED_DOCS.corner, published: true, footer: { bg: '#2A1F3D', color: '#FFD9F2' } },
     { id: 900002, slug: 'staging-biscuit-the-dog', title: 'Biscuit 🐾', type: 'pet', name: 'Biscuit', madeFor: 'Biscuit', doc: SEED_DOCS.biscuit, published: true, footer: { bg: '#F7DFC8', color: '#8A5A2B' } },
     { id: 900003, slug: 'staging-vex-the-oc', title: 'Vex (OC)', type: 'oc', name: 'Vex', madeFor: null, doc: SEED_DOCS.vex, published: true, footer: { bg: '#0A0F0A', color: '#7CFCD0' } },
@@ -1001,7 +1036,7 @@ async function seedStaging() {
     );
   }
   await pool.query(
-    `INSERT INTO page_visits (page_id, total) VALUES (900001, 214), (900002, 88), (900003, 41), (900004, 129), (900006, 5)
+    `INSERT INTO page_visits (page_id, total) VALUES (900001, 214), (900002, 88), (900003, 41), (900004, 129), (900006, 5), (900007, 96), (900009, 163)
      ON CONFLICT (page_id) DO NOTHING`
   );
   await pool.query(
@@ -1020,11 +1055,38 @@ async function seedStaging() {
   );
 }
 
+// Graceful shutdown (platform convention): stop accepting connections,
+// drain in-flight requests under a hard deadline, close the pool, exit.
+const DRAIN_MS = 3000;
+let shuttingDown = false;
+let server = null;
+
+async function shutdown(signal) {
+  if (shuttingDown) return; // idempotent: repeat signals must not double-run
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} received, draining`);
+  if (server) {
+    server.close(() => {});
+    server.closeIdleConnections?.();
+    const t = setTimeout(() => server.closeAllConnections?.(), DRAIN_MS);
+    t.unref?.();
+  }
+  try {
+    await pool.end();
+  } catch (e) {
+    console.error('[shutdown] pool.end failed', e.message);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 async function start() {
   await migrate();
   await seedCatalog();
   if (IS_STAGING) await seedStaging();
-  app.listen(port, () => console.log(`Listening on :${port}`));
+  server = app.listen(port, () => console.log(`Listening on :${port}`));
 }
 
 start().catch(err => { console.error(err); process.exit(1); });

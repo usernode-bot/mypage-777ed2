@@ -36,6 +36,7 @@
         subject_type: draft.subject_type,
         subject_name: draft.subject_name || null,
         content: draft.content,
+        template: draft.template || null, // starter template key (editor guidance)
         savedAt: Date.now(),
       }));
       return true;

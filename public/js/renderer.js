@@ -130,6 +130,45 @@
     }
   }
 
+  // Optional block-level frame chrome. Strictly additive: docs without a
+  // frame render byte-identically to before. Frame markup is app-generated;
+  // the only user string (frameTitle) goes through textContent.
+  const FRAME_KINDS = ['window', 'tape', 'polaroid'];
+
+  function applyFrame(el, block) {
+    const frame = typeof block.frame === 'string' && FRAME_KINDS.includes(block.frame) ? block.frame : null;
+    if (!frame) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'mp-frame mp-frame-' + frame;
+    if (typeof block.frameTitle === 'string' && block.frameTitle.trim()) wrap.classList.add('mp-frame-titled');
+    const body = document.createElement('div');
+    body.className = 'mp-frame-body';
+    if (frame === 'window') {
+      const bar = document.createElement('div');
+      bar.className = 'mp-frame-bar';
+      ['#FF6B57', '#FFE93F', '#7FB542'].forEach((c) => {
+        const dot = document.createElement('span');
+        dot.className = 'mp-frame-dot';
+        dot.style.background = c;
+        bar.appendChild(dot);
+      });
+      const title = document.createElement('span');
+      title.className = 'mp-frame-title';
+      title.textContent = typeof block.frameTitle === 'string' ? block.frameTitle.slice(0, 60) : '';
+      bar.appendChild(title);
+      wrap.appendChild(bar);
+    }
+    while (el.firstChild) body.appendChild(el.firstChild);
+    wrap.appendChild(body);
+    if (frame === 'polaroid') {
+      const cap = document.createElement('div');
+      cap.className = 'mp-frame-caption';
+      cap.textContent = typeof block.frameTitle === 'string' ? block.frameTitle.slice(0, 60) : '';
+      wrap.appendChild(cap);
+    }
+    el.appendChild(wrap);
+  }
+
   function renderBlock(block, ctx) {
     const el = document.createElement('div');
     el.className = 'mp-block';
@@ -184,6 +223,7 @@
     } else if (block.type === 'widget' && window.MPWidgets) {
       el.appendChild(window.MPWidgets.render(props, ctx || {}));
     }
+    applyFrame(el, block);
     return el;
   }
 
@@ -295,5 +335,6 @@
     setCatalog,
     getSticker: (key) => stickerMap[key],
     FONTS,
+    FRAME_KINDS,
   };
 })();

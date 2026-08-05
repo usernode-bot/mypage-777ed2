@@ -45,6 +45,12 @@
   ];
   const WIDGET_KINDS = [
     { kind: 'song', label: '🎵 now playing', mk: () => ({ kind: 'song' }) },
+    { kind: 'status', label: '💬 status', mk: () => ({ kind: 'status', emoji: '🌤️', text: 'decorating my page', updatedAt: new Date().toISOString() }) },
+    { kind: 'quote', label: '❝ quote card', mk: () => ({ kind: 'quote', title: 'what I always say', text: '“it is what it is.”', attribution: '' }) },
+    { kind: 'list', label: '📋 titled list', mk: () => ({ kind: 'list', title: 'fave things', items: [] }) },
+    { kind: 'playlist', label: '💿 playlist', mk: () => ({ kind: 'playlist', title: 'playlist', tracks: [] }) },
+    { kind: 'album', label: '🖼️ photo album', mk: () => ({ kind: 'album', title: 'photo album', photos: [], layout: 'strip' }) },
+    { kind: 'popup', label: '🪟 exit popup', mk: () => ({ kind: 'popup', title: 'Are you sure you want to leave?', body: 'You’ll be back.', stayLabel: 'stay a while ♡', byeLabel: 'ok bye :(' }) },
     { kind: 'counter', label: '🔢 visit counter', mk: () => ({ kind: 'counter', style: 'classic' }) },
     { kind: 'guestbook', label: '📖 guestbook', mk: () => ({ kind: 'guestbook' }) },
     { kind: 'mood', label: '😌 mood', mk: () => ({ kind: 'mood', mood: '😌', label: 'cozy' }) },
@@ -137,7 +143,7 @@
       document.body.classList.remove('mp-previewing');
       MPCursor.apply(null, document.body);
       MPSong.stop();
-      MP.navigate(isLocal ? '/make' : '/');
+      MP.navigate(isLocal ? '/make' : '/pages');
     });
     document.getElementById('mp-preview').addEventListener('click', togglePreview);
     document.getElementById('mp-title').addEventListener('click', openRename);
@@ -173,11 +179,14 @@
         page = {
           id: 'local', title: draft.title, subject_type: draft.subject_type,
           subject_name: draft.subject_name, content: draft.content,
-          published: false, slug: null,
+          published: false, slug: null, template: draft.template || null,
         };
         document.getElementById('mp-tool-gb').style.display = 'none';
       } else {
         ({ page } = await MP.api('/api/pages/' + id));
+        // The shell records which template a page started from (guidance
+        // is editor chrome, never page content).
+        try { page.template = localStorage.getItem('mp_tpl_' + page.id) || null; } catch {}
       }
     } catch (err) {
       canvas.innerHTML = '';
@@ -217,6 +226,43 @@
       b.textContent = '✏️ Draft saved on this device only — publish to give it a home.';
       el.appendChild(b);
     }
+    // Template guidance: a dismissible checklist for pages that started
+    // from a starter template. Editor chrome only — never on the page.
+    const tplKey = page.template;
+    if (tplKey && catalog) {
+      let dismissed = false;
+      const dismissKey = 'mp_steps_done_' + (isLocal ? 'local' : page.id);
+      try { dismissed = !!localStorage.getItem(dismissKey); } catch {}
+      const tpl = (catalog.templates || []).find((t) => t.key === tplKey);
+      const steps = tpl && Array.isArray(tpl.steps) ? tpl.steps.filter((s) => typeof s === 'string') : [];
+      if (!dismissed && steps.length) {
+        const b = document.createElement('div');
+        b.className = 'mp-checklist';
+        b.setAttribute('data-testid', 'template-checklist');
+        const body = document.createElement('div');
+        body.style.flex = '1';
+        const kicker = document.createElement('div');
+        kicker.className = 'mp-checklist-kicker';
+        kicker.textContent = 'make it yours';
+        const ol = document.createElement('ol');
+        steps.slice(0, 5).forEach((s) => {
+          const li = document.createElement('li');
+          li.textContent = s.slice(0, 140);
+          ol.appendChild(li);
+        });
+        body.append(kicker, ol);
+        const x = document.createElement('button');
+        x.className = 'mp-checklist-x';
+        x.setAttribute('aria-label', 'Dismiss checklist');
+        x.textContent = '✕';
+        x.addEventListener('click', () => {
+          try { localStorage.setItem(dismissKey, '1'); } catch {}
+          b.remove();
+        });
+        b.append(body, x);
+        el.appendChild(b);
+      }
+    }
   }
 
   function setSaveState(text) {
@@ -236,7 +282,7 @@
   async function save() {
     clearTimeout(saveTimer);
     if (isLocal) {
-      MPDraft.save({ title: page.title, subject_type: page.subject_type, subject_name: page.subject_name, content: doc });
+      MPDraft.save({ title: page.title, subject_type: page.subject_type, subject_name: page.subject_name, content: doc, template: page.template || null });
       dirty = false;
       setSaveState('saved here ✓');
       return;
@@ -694,6 +740,13 @@
       if (kind === 'marquee') return openMarqueeProps(block);
       if (kind === 'counter') return openCounterProps(block);
       if (kind === 'song') return openSong();
+      if (kind === 'status') return openStatusProps(block);
+      if (kind === 'quote') return openQuoteProps(block);
+      if (kind === 'list') return openListProps(block);
+      if (kind === 'playlist') return openPlaylistProps(block);
+      if (kind === 'album') return openAlbumProps(block);
+      if (kind === 'popup') return openPopupProps(block);
+      if (kind === 'guestbook') return openCardTitleProps(block, '📖 guestbook', 'guestbook');
       MP.toast('Drag it, rotate it, resize it — that’s the widget');
     }
   }
@@ -870,6 +923,288 @@
     MP.openModal({ title: '🔢 visit counter', contentEl: wrap, actions: [{ label: 'Done' }] });
   }
 
+  function openStatusProps(block) {
+    const content = document.createElement('div');
+    const emoji = textInput(block.props.emoji, 8, '🌤️');
+    const text = textInput(block.props.text, 280, 'solo parenting today. wish me luck!');
+    const emojiRow = document.createElement('div');
+    emojiRow.className = 'mp-panel-row';
+    emoji.style.flex = '1';
+    const pick = document.createElement('button');
+    pick.className = 'mp-chip mp-chip-btn';
+    pick.textContent = '😊 pick';
+    pick.addEventListener('click', () => {
+      MPEmoji.open({ title: 'Pick an emoji', onPick: (em) => { emoji.value = em; } });
+    });
+    emojiRow.append(emoji, pick);
+    content.append(fieldRow('Emoji (optional)', emojiRow), fieldRow('What’s happening?', text));
+    const note = document.createElement('p');
+    note.className = 'mp-muted';
+    note.style.fontSize = '12px';
+    note.textContent = 'Saving stamps the little “updated …” time.';
+    content.appendChild(note);
+    MP.openModal({
+      title: '💬 status', contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.emoji = emoji.value.trim();
+          block.props.text = text.value;
+          block.props.updatedAt = new Date().toISOString();
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
+  function openQuoteProps(block) {
+    const content = document.createElement('div');
+    const title = textInput(block.props.title, 60, 'what you always say');
+    const ta = document.createElement('textarea');
+    ta.className = 'mp-input mp-textarea';
+    ta.style.minHeight = '80px';
+    ta.maxLength = 600;
+    ta.value = block.props.text || '';
+    const attr = textInput(block.props.attribution, 80, 'who said it (optional)');
+    content.append(fieldRow('Card label', title), fieldRow('The words', ta), fieldRow('Attribution', attr));
+    MP.openModal({
+      title: '❝ quote card', contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.title = title.value.trim();
+          block.props.text = ta.value;
+          block.props.attribution = attr.value.trim();
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
+  function openListProps(block) {
+    const content = document.createElement('div');
+    const title = textInput(block.props.title, 60, 'fave movies');
+    content.appendChild(fieldRow('List title', title));
+    const rows = [];
+    const list = document.createElement('div');
+    function addRow(item) {
+      const wrap = document.createElement('div');
+      wrap.className = 'mp-panel-row';
+      const label = textInput(item.label, 80, 'Clueless');
+      const value = textInput(item.value, 40, '1995 (optional)');
+      value.style.flex = '0 0 120px';
+      wrap.append(label, value);
+      list.appendChild(wrap);
+      rows.push({ label, value });
+    }
+    (Array.isArray(block.props.items) && block.props.items.length ? block.props.items : [{ label: '', value: '' }]).slice(0, 10).forEach(addRow);
+    content.appendChild(list);
+    const more = document.createElement('button');
+    more.className = 'mp-chip mp-chip-btn';
+    more.textContent = '＋ row';
+    more.addEventListener('click', () => { if (rows.length < 10) addRow({ label: '', value: '' }); });
+    content.appendChild(more);
+    MP.openModal({
+      title: '📋 titled list', contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.title = title.value.trim();
+          block.props.items = rows.map((r) => ({ label: r.label.value.trim(), value: r.value.value.trim() })).filter((r) => r.label || r.value);
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
+  function openPlaylistProps(block) {
+    const content = document.createElement('div');
+    const title = textInput(block.props.title, 60, 'gifted playlist');
+    content.appendChild(fieldRow('Playlist title', title));
+    const note = document.createElement('p');
+    note.className = 'mp-muted';
+    note.style.fontSize = '12px';
+    note.textContent = 'A tracklist card, like the back of a burned CD. Links open elsewhere — the page’s actual song lives in 🎵.';
+    content.appendChild(note);
+    const rows = [];
+    const list = document.createElement('div');
+    function addRow(t) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'border-bottom:1px solid var(--line);padding:6px 0;';
+      const row1 = document.createElement('div');
+      row1.className = 'mp-panel-row';
+      const trackTitle = textInput(t.title, 90, 'track title');
+      const artist = textInput(t.artist, 90, 'artist');
+      row1.append(trackTitle, artist);
+      const url = textInput(t.url, 500, 'listen link (optional) https://…');
+      url.style.marginTop = '6px';
+      wrap.append(row1, url);
+      list.appendChild(wrap);
+      rows.push({ title: trackTitle, artist, url });
+    }
+    (Array.isArray(block.props.tracks) && block.props.tracks.length ? block.props.tracks : [{ title: '', artist: '', url: '' }]).slice(0, 8).forEach(addRow);
+    content.appendChild(list);
+    const more = document.createElement('button');
+    more.className = 'mp-chip mp-chip-btn';
+    more.style.marginTop = '8px';
+    more.textContent = '＋ track';
+    more.addEventListener('click', () => { if (rows.length < 8) addRow({ title: '', artist: '', url: '' }); });
+    content.appendChild(more);
+    MP.openModal({
+      title: '💿 playlist', contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.title = title.value.trim();
+          block.props.tracks = rows
+            .map((r) => ({ title: r.title.value.trim(), artist: r.artist.value.trim(), url: r.url.value.trim() || undefined }))
+            .filter((r) => r.title || r.artist);
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
+  function openAlbumProps(block) {
+    const content = document.createElement('div');
+    const title = textInput(block.props.title, 60, 'photo album');
+    content.appendChild(fieldRow('Album title', title));
+    const layoutRow = document.createElement('div');
+    layoutRow.className = 'mp-panel-row';
+    let layout = block.props.layout === 'grid' ? 'grid' : 'strip';
+    [['strip', '▭▭▭ strip'], ['grid', '⊞ grid']].forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.className = 'mp-chip mp-chip-btn' + (layout === key ? ' mp-chip-on' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        layout = key;
+        layoutRow.querySelectorAll('.mp-chip').forEach((x) => x.classList.remove('mp-chip-on'));
+        b.classList.add('mp-chip-on');
+      });
+      layoutRow.appendChild(b);
+    });
+    content.appendChild(fieldRow('Layout', layoutRow));
+
+    const photos = Array.isArray(block.props.photos) ? block.props.photos.filter((id) => Number.isInteger(id)).slice(0, 6) : [];
+    const strip = document.createElement('div');
+    strip.className = 'mp-panel-row';
+    strip.style.flexWrap = 'wrap';
+    function renderStrip() {
+      strip.textContent = '';
+      photos.forEach((id, i) => {
+        const cell = document.createElement('button');
+        cell.style.cssText = 'width:56px;height:56px;border-radius:10px;overflow:hidden;border:1.5px solid var(--line);padding:0;position:relative;';
+        cell.title = 'remove this photo';
+        const img = document.createElement('img');
+        img.src = '/assets/' + id;
+        img.alt = '';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+        cell.appendChild(img);
+        cell.addEventListener('click', () => { photos.splice(i, 1); renderStrip(); });
+        strip.appendChild(cell);
+      });
+      if (photos.length < 6) {
+        const add = document.createElement('button');
+        add.className = 'mp-chip mp-chip-btn';
+        add.textContent = '＋ photo';
+        add.addEventListener('click', () => {
+          if (isLocal) { MP.toast('Photos need an account — publish first, then add them'); return; }
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/jpeg,image/png,image/webp,image/gif';
+          input.addEventListener('change', async () => {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            MP.toast('Uploading…');
+            try {
+              const asset = await uploadImage(file);
+              photos.push(asset.id);
+              renderStrip();
+              MP.toast('Added ✓');
+            } catch (err) { MP.toast(err.message); }
+          });
+          input.click();
+        });
+        strip.appendChild(add);
+      }
+    }
+    renderStrip();
+    content.appendChild(fieldRow('Photos (tap one to remove)', strip));
+    if (isLocal) {
+      const hint = document.createElement('p');
+      hint.className = 'mp-muted';
+      hint.style.fontSize = '12px';
+      hint.textContent = 'Photo slots show placeholders for now — sign in to add photos.';
+      content.appendChild(hint);
+    }
+    MP.openModal({
+      title: '🖼️ photo album', contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.title = title.value.trim();
+          block.props.layout = layout;
+          block.props.photos = photos.slice(0, 6);
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
+  function openPopupProps(block) {
+    const content = document.createElement('div');
+    const title = textInput(block.props.title, 120, 'Are you sure you want to leave?');
+    const body = document.createElement('textarea');
+    body.className = 'mp-input mp-textarea';
+    body.style.minHeight = '70px';
+    body.maxLength = 400;
+    body.value = block.props.body || '';
+    const stay = textInput(block.props.stayLabel, 40, 'stay a while ♡');
+    const bye = textInput(block.props.byeLabel, 40, 'ok bye :(');
+    content.append(fieldRow('Title', title), fieldRow('Message', body), fieldRow('“Stay” button', stay), fieldRow('“Leave” button', bye));
+    const note = document.createElement('p');
+    note.className = 'mp-muted';
+    note.style.fontSize = '12px';
+    note.textContent = 'Pure theatre — “leave” just tucks the popup away for that visit. Nothing is ever actually blocked.';
+    content.appendChild(note);
+    MP.openModal({
+      title: '🪟 exit popup', contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.title = title.value.trim();
+          block.props.body = body.value;
+          block.props.stayLabel = stay.value.trim();
+          block.props.byeLabel = bye.value.trim();
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
+  // Optional card-label override on widgets whose only editable prop is the
+  // title ("fan club notes" instead of "guestbook").
+  function openCardTitleProps(block, modalTitle, placeholder) {
+    const content = document.createElement('div');
+    const title = textInput(block.props.title, 60, placeholder);
+    content.appendChild(fieldRow('Card label', title));
+    const note = document.createElement('p');
+    note.className = 'mp-muted';
+    note.style.fontSize = '12px';
+    note.textContent = 'Leave it empty for the default label.';
+    content.appendChild(note);
+    MP.openModal({
+      title: modalTitle, contentEl: content,
+      actions: [{ label: 'Cancel' }, {
+        label: 'Save', accent: true,
+        onClick(ctl) {
+          block.props.title = title.value.trim();
+          ctl.close(); rerenderSelected();
+        },
+      }],
+    });
+  }
+
   function openImageProps() {
     const block = selBlock();
     const content = document.createElement('div');
@@ -923,6 +1258,49 @@
     return row;
   }
 
+  // Frames: optional app-generated chrome around a block — Mac-style
+  // window, washi tape, or polaroid. Additive; 'none' removes the props.
+  function frameRow(block) {
+    const row = document.createElement('div');
+    row.className = 'mp-panel-row';
+    const FRAMES = [[null, 'no frame'], ['window', '🖥 window'], ['tape', '🩹 tape'], ['polaroid', '🖼 polaroid']];
+    FRAMES.forEach(([key, label]) => {
+      const b = document.createElement('button');
+      const on = (block.frame || null) === key;
+      b.className = 'mp-chip mp-chip-btn' + (on ? ' mp-chip-on' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        if (key) block.frame = key;
+        else { delete block.frame; delete block.frameTitle; }
+        rerenderSelected();
+      });
+      row.appendChild(b);
+    });
+    if (block.frame === 'window' || block.frame === 'polaroid') {
+      const lbl = document.createElement('button');
+      lbl.className = 'mp-chip mp-chip-btn';
+      lbl.textContent = '✏️ frame label';
+      lbl.addEventListener('click', () => {
+        const content = document.createElement('div');
+        const input = textInput(block.frameTitle, 60, block.frame === 'window' ? 'Now Playing' : 'little moments');
+        content.appendChild(fieldRow(block.frame === 'window' ? 'Title bar text' : 'Caption', input));
+        MP.openModal({
+          title: 'Frame label', contentEl: content,
+          actions: [{ label: 'Cancel' }, {
+            label: 'Save', accent: true,
+            onClick(ctl) {
+              const v = input.value.trim();
+              if (v) block.frameTitle = v; else delete block.frameTitle;
+              ctl.close(); rerenderSelected();
+            },
+          }],
+        });
+      });
+      row.appendChild(lbl);
+    }
+    return row;
+  }
+
   function renderPanel() {
     const panel = document.getElementById('mp-panel');
     if (!panel) return;
@@ -939,6 +1317,7 @@
 
     if (block.type !== 'text') {
       panel.appendChild(commonRow());
+      if (block.type === 'image' || block.type === 'widget') panel.appendChild(frameRow(block));
       return;
     }
 
@@ -984,6 +1363,7 @@
     custom.addEventListener('input', () => updateSelectedText((pp) => { pp.color = custom.value; }, true));
     row3.appendChild(custom);
     panel.appendChild(row3);
+    panel.appendChild(frameRow(block));
   }
 
   // ---------------------------------------------------------------- modals
@@ -1684,38 +2064,93 @@
       });
       return;
     }
+    // Three clearly explained visibility choices (spec): Just me (draft),
+    // Anyone with the link (published, unlisted), Public (published +
+    // listed in Discover). Publishing + listing are existing server
+    // capabilities — this dialog just composes them honestly.
     const content = document.createElement('div');
     const isPub = page.published;
-    content.innerHTML = `
-      <p class="mp-muted" style="font-size:13.5px;">${isPub
-        ? 'This page is live. You can change its handle — the old link stops working.'
-        : 'Pick the handle for your page’s link. Anyone with the link can visit — no account needed.'}</p>
+    let choice = !isPub ? 'me' : (page.directory_listed !== false ? 'public' : 'link');
+
+    const CHOICES = [
+      ['me', '🔒', 'Just me', isPub
+        ? 'Already live — a published page can’t go back to a private draft, but you can hide it from Discover below.'
+        : 'Keep it a draft. Nobody else can open it.'],
+      ['link', '🔗', 'Anyone with the link', 'Published at your handle, but not listed in Discover. You choose who gets the link.'],
+      ['public', '🌍', 'Public', 'Published and listed in Discover for anyone to wander into.'],
+    ];
+
+    const rows = document.createElement('div');
+    const slugWrap = document.createElement('div');
+    slugWrap.innerHTML = `
       <label class="mp-label">Handle</label>
       <div class="mp-slug-row"><span class="mp-slug-prefix">/p/</span><input id="mp-slug" class="mp-input" maxlength="30" spellcheck="false" autocapitalize="off"></div>
-      <p id="mp-slug-err" class="mp-form-err"></p>
-    `;
-    const input = content.querySelector('#mp-slug');
+      <p id="mp-slug-err" class="mp-form-err"></p>`;
+    const input = slugWrap.querySelector('#mp-slug');
     input.value = page.slug || MP.slugify(page.title);
-    const errEl = content.querySelector('#mp-slug-err');
+    const errEl = slugWrap.querySelector('#mp-slug-err');
+
+    function refreshRows() {
+      rows.querySelectorAll('.mp-vis-row').forEach((r) => {
+        r.classList.toggle('mp-vis-on', r.dataset.choice === choice);
+      });
+      slugWrap.style.display = choice === 'me' ? 'none' : '';
+    }
+    CHOICES.forEach(([key, emoji, name, desc]) => {
+      const r = document.createElement('button');
+      r.className = 'mp-vis-row';
+      r.dataset.choice = key;
+      const disabled = key === 'me' && isPub;
+      if (disabled) r.style.opacity = '.55';
+      const em = document.createElement('span');
+      em.className = 'mp-vis-emoji';
+      em.textContent = emoji;
+      const body = document.createElement('div');
+      const n = document.createElement('div');
+      n.className = 'mp-vis-name';
+      n.textContent = name;
+      const d = document.createElement('div');
+      d.className = 'mp-vis-desc';
+      d.textContent = desc;
+      body.append(n, d);
+      r.append(em, body);
+      if (!disabled) r.addEventListener('click', () => { choice = key; refreshRows(); });
+      rows.appendChild(r);
+    });
+    content.append(rows, slugWrap);
+    refreshRows();
 
     MP.openModal({
-      title: isPub ? 'Published page' : 'Publish this page',
+      title: isPub ? 'Who can see this page?' : 'Publish this page',
       contentEl: content,
       actions: [
         { label: 'Cancel' },
         {
-          label: isPub ? 'Update handle' : 'Publish', accent: true,
+          label: 'Save', accent: true,
           async onClick(ctl, btn) {
-            const slug = input.value.trim().toLowerCase();
             errEl.textContent = '';
+            if (choice === 'me') {
+              // Unpublished + "just me" is simply staying a draft.
+              ctl.close();
+              if (!isPub) MP.toast('Still a draft — just yours');
+              return;
+            }
+            const slug = input.value.trim().toLowerCase();
             btn.disabled = true;
             try {
               if (dirty) await save();
+              const wasPublished = page.published;
               const res = await MP.api('/api/pages/' + page.id + '/publish', { method: 'POST', body: { slug } });
               page = Object.assign(page, res.page);
+              const wantListed = choice === 'public';
+              if ((page.directory_listed !== false) !== wantListed) {
+                const r2 = await MP.api('/api/pages/' + page.id, { method: 'PUT', body: { directory_listed: wantListed } });
+                page = Object.assign(page, r2.page);
+              }
               refreshTopbar();
               ctl.close();
-              openPublished();
+              if (!wasPublished) openPublished();
+              else MP.toast(wantListed ? 'Listed in Discover' : 'Published — link only');
             } catch (err) {
               btn.disabled = false;
               errEl.textContent = err.message;
@@ -1724,7 +2159,7 @@
         },
       ],
     });
-    setTimeout(() => input.focus(), 60);
+    if (choice !== 'me') setTimeout(() => input.focus(), 60);
   }
 
   function openPublished() {
