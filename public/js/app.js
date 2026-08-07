@@ -322,10 +322,7 @@
   function header() {
     return `
       <header class="mp-home-header">
-        <div>
-          <div class="mp-kicker">your corner of the internet</div>
-          <h1 class="mp-wordmark">MyPage</h1>
-        </div>
+        <h1 class="mp-wordmark">MyPage</h1>
         <div class="mp-home-actions">
           ${themeButton()}
         </div>
@@ -362,54 +359,33 @@
 
   // -------------------------------------------------------------------- home
 
+  // Card thumbnails for the flagship templates: final reference images
+  // provided by the owner, committed as static assets and used verbatim
+  // (cropped, never redrawn). Templates without one fall back to the
+  // accurate scaled live preview.
+  const TPL_IMAGES = {
+    'scene-page': '/img/tpl-scene.jpg',
+    'bestie-page': '/img/tpl-bestie.jpg',
+    'y2k-page': '/img/tpl-y2k.jpg',
+  };
+
   async function renderHome() {
     const app = document.getElementById('app');
     app.innerHTML = header() + `
       <main class="mp-home mp-has-nav" data-testid="home">
         <section class="mp-hero" data-testid="home-hero">
-          <h2 class="mp-hero-title">Personal pages are back.</h2>
-          <p class="mp-hero-sub">Create a page for yourself, a friend, or your pet. Decorate it with music, photos, words, memories, and anything else that feels like them.</p>
+          <h2 class="mp-hero-title">Make a page</h2>
+          <p class="mp-hero-sub">For yourself, a friend, or your pet.</p>
           <div class="mp-hero-acts">
-            <button id="mp-hero-create" class="mp-btn mp-btn-accent">Create a page</button>
-            <button class="mp-btn mp-btn-quiet" data-nav="/templates">Browse templates</button>
+            <button class="mp-btn mp-btn-accent" data-nav="/templates">Start with a template →</button>
+            <button class="mp-link-quiet" data-nav="/templates">Browse templates</button>
           </div>
         </section>
+        <h3 class="mp-h2">Start with a template</h3>
+        <div id="mp-home-carousel" class="mp-carousel" data-testid="home-carousel"></div>
         <div id="mp-home-mine"></div>
-        <div class="mp-sect-label">Featured templates</div>
-        <div id="mp-home-rail" class="mp-rail"><div class="mp-muted" style="padding:10px 4px;font-size:13px;">loading templates…</div></div>
-        <div class="mp-sect-label">Made for you</div>
-        <div class="mp-made-tiles" id="mp-home-tiles"></div>
-        <p class="mp-muted" style="text-align:center;padding:26px 8px 8px;font-size:12.5px;">no feed, no followers — just pages</p>
       </main>` + bottomNav('home');
     wireShell(app);
-    document.getElementById('mp-hero-create').addEventListener('click', () => {
-      if (token) openChooser();
-      else navigate('/make');
-    });
-
-    // Made for you: three doors straight into creating that kind of page,
-    // each with the matching flagship template suggested. (OC and comfort-
-    // character pages remain in the full create flow.)
-    const TILES = [
-      ['self', '🌟', 'For me', 'scene-page'],
-      ['friend', '💌', 'For friends', 'bestie-page'],
-      ['pet', '🐾', 'My pet', 'pet-fan-page'],
-    ];
-    const tiles = document.getElementById('mp-home-tiles');
-    TILES.forEach(([subject, emoji, label, tplKey]) => {
-      const b = document.createElement('button');
-      b.className = 'mp-made-tile';
-      b.innerHTML = `<span class="mp-made-emoji">${emoji}</span><span>${label}</span>`;
-      b.addEventListener('click', async () => {
-        let tpl = null;
-        try {
-          const cat = await loadCatalog();
-          tpl = (cat.templates || []).find((t) => t.key === tplKey) || null;
-        } catch {}
-        openCreateForm(subject, !token, { template: tpl });
-      });
-      tiles.appendChild(b);
-    });
 
     // Signed in with pages already? Keep home useful after day one.
     if (token) {
@@ -417,14 +393,14 @@
         if (!pages.length) return;
         const mount = document.getElementById('mp-home-mine');
         if (!mount) return;
-        const label = document.createElement('div');
-        label.className = 'mp-sect-label';
+        const label = document.createElement('h3');
+        label.className = 'mp-h2';
         label.textContent = 'Your pages';
         mount.appendChild(label);
         pages.slice(0, 3).forEach((p) => mount.appendChild(myPageCard(p)));
         if (pages.length > 3) {
           const all = document.createElement('button');
-          all.className = 'mp-btn mp-btn-quiet mp-btn-sm';
+          all.className = 'mp-link-quiet';
           all.textContent = 'All your pages →';
           all.addEventListener('click', () => navigate('/pages'));
           mount.appendChild(all);
@@ -432,32 +408,43 @@
       }).catch(() => {});
     }
 
-    // Featured rail: accurate scaled renders of the real templates.
+    // Template carousel: image-first cards. Tapping one opens the real
+    // template full-screen with its "Use template" action.
     try {
       const cat = await loadCatalog();
-      const rail = document.getElementById('mp-home-rail');
-      if (!rail) return;
-      rail.textContent = '';
+      const carousel = document.getElementById('mp-home-carousel');
+      if (!carousel) return;
+      carousel.textContent = '';
       featuredTemplates(cat).forEach((t) => {
-        const card = document.createElement('button');
-        card.className = 'mp-rail-card';
-        card.appendChild(templatePreview(t.content, { height: 150 }));
-        const meta = document.createElement('div');
-        meta.className = 'mp-rail-meta';
+        const tile = document.createElement('button');
+        tile.className = 'mp-tpl-tile';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'mp-tpl-tile-img';
+        if (TPL_IMAGES[t.key]) {
+          const img = document.createElement('img');
+          img.src = TPL_IMAGES[t.key];
+          img.alt = t.name;
+          img.loading = 'lazy';
+          img.draggable = false;
+          imgWrap.appendChild(img);
+        } else {
+          const prev = templatePreview(t.content, { height: 312 });
+          prev.style.height = '100%';
+          imgWrap.appendChild(prev);
+        }
         const name = document.createElement('div');
-        name.className = 'mp-rail-name';
+        name.className = 'mp-tpl-tile-name';
         name.textContent = t.name;
         const tag = document.createElement('div');
-        tag.className = 'mp-rail-tag';
+        tag.className = 'mp-tpl-tile-tag';
         tag.textContent = t.tagline || t.description || '';
-        meta.append(name, tag);
-        card.appendChild(meta);
-        card.addEventListener('click', () => openTemplateFullPreview(t));
-        rail.appendChild(card);
+        tile.append(imgWrap, name, tag);
+        tile.addEventListener('click', () => openTemplateFullPreview(t));
+        carousel.appendChild(tile);
       });
     } catch (err) {
-      const rail = document.getElementById('mp-home-rail');
-      if (rail) rail.innerHTML = `<div class="mp-muted" style="padding:10px 4px;font-size:13px;">${escapeHtml(err.message)}</div>`;
+      const carousel = document.getElementById('mp-home-carousel');
+      if (carousel) carousel.innerHTML = `<div class="mp-muted" style="padding:10px 4px;font-size:13px;">${escapeHtml(err.message)}</div>`;
     }
   }
 

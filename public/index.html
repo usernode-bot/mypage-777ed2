@@ -172,7 +172,7 @@
 
     .mp-muted { color: var(--ink-soft); }
     .mp-kicker { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-deep); font-weight: 700; }
-    .mp-wordmark { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 30px; margin: 2px 0 0; line-height: 1.05; }
+    .mp-wordmark { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 24px; margin: 0; line-height: 1.05; }
 
     .mp-btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -211,51 +211,50 @@
     .mp-nav-dot { display: none; }
     .mp-nav-create {
       display: grid; place-items: center; align-self: center; flex: none;
-      width: 52px; height: 52px; border-radius: 50%; margin: -14px 8px 0;
+      width: 50px; height: 50px; border-radius: 50%; margin: -10px 8px 0;
       background: var(--cta-gradient); color: #141F3C;
-      box-shadow: 0 6px 16px rgba(20,31,60,.22);
+      box-shadow: 0 1px 4px rgba(20,31,60,.15);
     }
     .mp-nav-create svg { width: 26px; height: 26px; }
     /* Screens with the bottom nav need breathing room above it. */
     .mp-has-nav { padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
 
     /* ------------------------------------------------------------ hero */
-    .mp-hero { padding: 8px 2px 4px; }
+    .mp-hero { padding: 10px 2px 4px; }
     .mp-hero-title {
       font-family: 'Fraunces', Georgia, serif; font-weight: 900;
-      font-size: 38px; line-height: 1.06; margin: 0 0 10px; letter-spacing: -.01em;
+      font-size: 34px; line-height: 1.06; margin: 0 0 6px; letter-spacing: -.01em;
     }
     .mp-hero-sub { color: var(--ink-soft); font-size: 15px; max-width: 430px; margin: 0 0 16px; }
-    .mp-hero-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .mp-hero-acts { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+    /* Quiet secondary action — plain muted text, not a second big button. */
+    .mp-link-quiet { color: var(--ink-soft); font-weight: 600; font-size: 14px; padding: 8px 2px; }
+    /* Plain sans section heading (serif stays reserved for the wordmark
+       and the hero headline). */
+    .mp-h2 { font-size: 17px; font-weight: 700; margin: 22px 2px 10px; letter-spacing: -.01em; }
 
     /* --------------------------------------------- template previews */
     /* An accurate miniature: the template's real doc rendered at page width
        (720px) inside a clipped card, scaled down with transform. */
     .mp-tpl-thumb { position: relative; overflow: hidden; background: var(--paper-deep); pointer-events: none; }
     .mp-tpl-scaler { position: absolute; top: 0; left: 0; width: 720px; transform-origin: top left; }
-    .mp-rail {
-      display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none;
-      padding: 4px 2px 8px; margin: 0 -18px; padding-left: 18px; padding-right: 18px;
+    /* Home template carousel — content cards, Netflix/Pinterest style:
+       one rounded image (~75–80% of the tile), concise text underneath,
+       no card box around the whole thing. */
+    .mp-carousel {
+      display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none;
+      padding: 2px 18px 8px; margin: 0 -18px;
       scroll-snap-type: x proximity;
     }
-    .mp-rail::-webkit-scrollbar { display: none; }
-    .mp-rail-card {
-      flex: none; width: 190px; scroll-snap-align: start; text-align: left;
-      background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
-      overflow: hidden; box-shadow: 0 1px 0 var(--shadow-card); padding: 0;
+    .mp-carousel::-webkit-scrollbar { display: none; }
+    .mp-tpl-tile { flex: none; width: 236px; scroll-snap-align: start; text-align: left; padding: 0; }
+    .mp-tpl-tile-img {
+      position: relative; height: 312px; border-radius: 16px; overflow: hidden;
+      background: var(--paper-deep);
     }
-    .mp-rail-card .mp-tpl-thumb { height: 150px; }
-    .mp-rail-meta { padding: 10px 12px 12px; }
-    .mp-rail-name { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 15px; }
-    .mp-rail-tag { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
-    .mp-made-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-    .mp-made-tile {
-      display: flex; flex-direction: column; align-items: center; gap: 6px;
-      background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px;
-      padding: 16px 8px; font-weight: 700; font-size: 13px; color: var(--ink);
-    }
-    .mp-made-tile:active { border-color: var(--accent); }
-    .mp-made-emoji { font-size: 26px; }
+    .mp-tpl-tile-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .mp-tpl-tile-name { font-weight: 600; font-size: 14.5px; margin: 9px 2px 0; }
+    .mp-tpl-tile-tag { font-size: 12.5px; color: var(--ink-soft); margin: 1px 2px 0; }
     .mp-tpl-card {
       display: block; width: 100%; text-align: left; margin-bottom: 14px;
       background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
@@ -285,8 +284,8 @@
 
     /* ------------------------------------------------------------- home */
     .mp-home-header {
-      display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
-      padding: calc(18px + env(safe-area-inset-top)) 18px 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: calc(16px + env(safe-area-inset-top)) 18px 8px;
       max-width: 720px; margin: 0 auto;
     }
     .mp-home-actions { display: flex; align-items: center; gap: 8px; flex: none; }

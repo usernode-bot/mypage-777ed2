@@ -4,6 +4,7 @@
   "secrets": [],
   "tests": [
     { "name": "Home hero renders", "path": "/", "expectSelector": "[data-testid=home-hero]" },
+    { "name": "Home template carousel shows image cards", "path": "/", "expectSelector": "[data-testid=home-carousel] .mp-tpl-tile-img img" },
     { "name": "Bottom nav renders", "path": "/", "expectSelector": "[data-testid=bottom-nav]" },
     { "name": "Templates gallery renders", "path": "/templates", "expectSelector": "[data-testid=templates]" },
     { "name": "Featured template card renders", "path": "/templates", "expectSelector": "[data-testid=featured-template] .mp-tpl-scaler .mp-section" },
