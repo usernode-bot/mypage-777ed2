@@ -18,6 +18,14 @@
     return el;
   }
 
+  // Optional per-widget card label override ("fan club notes" instead of
+  // "guestbook"). User string — textContent only, sliced.
+  function cardTitle(props, fallback) {
+    return (typeof props.title === 'string' && props.title.trim())
+      ? props.title.trim().slice(0, 60)
+      : fallback;
+  }
+
   function timeAgo(iso) {
     const t = new Date(iso).getTime();
     if (!Number.isFinite(t)) return '';
@@ -128,7 +136,7 @@
     },
 
     song(props, ctx) {
-      const el = card('now playing — on repeat');
+      const el = card(cardTitle(props, 'now playing — on repeat'));
       const row = document.createElement('div');
       row.className = 'mpw-song';
       const song = ctx && ctx.song;
@@ -170,8 +178,209 @@
       return el;
     },
 
+    status(props) {
+      const el = card(cardTitle(props, 'status'));
+      const row = document.createElement('div');
+      row.className = 'mpw-status-row';
+      if (typeof props.emoji === 'string' && props.emoji.trim()) {
+        const em = document.createElement('span');
+        em.className = 'mpw-status-emoji';
+        em.textContent = [...props.emoji.trim()].slice(0, 4).join('');
+        row.appendChild(em);
+      }
+      const body = document.createElement('div');
+      const text = document.createElement('div');
+      text.className = 'mpw-status-text';
+      text.textContent = typeof props.text === 'string' && props.text.trim()
+        ? props.text.slice(0, 280) : 'no status yet';
+      body.appendChild(text);
+      const when = new Date(props.updatedAt || NaN).getTime();
+      if (Number.isFinite(when)) {
+        const time = document.createElement('div');
+        time.className = 'mpw-status-time';
+        time.textContent = 'updated ' + timeAgo(new Date(when).toISOString());
+        body.appendChild(time);
+      }
+      row.appendChild(body);
+      el.appendChild(row);
+      return el;
+    },
+
+    quote(props) {
+      const el = card(cardTitle(props, 'quote'));
+      const q = document.createElement('div');
+      q.className = 'mpw-quote-text';
+      q.textContent = typeof props.text === 'string' && props.text.trim()
+        ? props.text.slice(0, 600) : '“…”';
+      el.appendChild(q);
+      if (typeof props.attribution === 'string' && props.attribution.trim()) {
+        const a = document.createElement('div');
+        a.className = 'mpw-quote-attr';
+        a.textContent = '— ' + props.attribution.slice(0, 80);
+        el.appendChild(a);
+      }
+      return el;
+    },
+
+    list(props) {
+      const el = card(cardTitle(props, 'list'));
+      const items = Array.isArray(props.items) ? props.items.slice(0, 10) : [];
+      items.forEach((it) => {
+        if (!it || typeof it !== 'object') return;
+        const row = document.createElement('div');
+        row.className = 'mpw-list-row';
+        const label = document.createElement('span');
+        label.textContent = typeof it.label === 'string' ? it.label.slice(0, 80) : '';
+        row.appendChild(label);
+        if (typeof it.value === 'string' && it.value.trim()) {
+          const val = document.createElement('span');
+          val.className = 'mpw-list-val';
+          val.textContent = it.value.slice(0, 40);
+          row.appendChild(val);
+        }
+        el.appendChild(row);
+      });
+      if (!items.length) {
+        const hint = document.createElement('div');
+        hint.className = 'mpw-gb-note';
+        hint.textContent = 'a titled list — movies, nicknames, routines…';
+        el.appendChild(hint);
+      }
+      return el;
+    },
+
+    playlist(props, ctx) {
+      const el = card(cardTitle(props, 'playlist'));
+      const tracks = Array.isArray(props.tracks) ? props.tracks.slice(0, 8) : [];
+      tracks.forEach((t, i) => {
+        if (!t || typeof t !== 'object') return;
+        const row = document.createElement('div');
+        row.className = 'mpw-pl-row';
+        const num = document.createElement('span');
+        num.className = 'mpw-pl-num';
+        num.textContent = String(i + 1).padStart(2, '0');
+        const meta = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'mpw-pl-title';
+        title.textContent = typeof t.title === 'string' ? t.title.slice(0, 90) : '';
+        meta.appendChild(title);
+        if (typeof t.artist === 'string' && t.artist.trim()) {
+          const artist = document.createElement('div');
+          artist.className = 'mpw-pl-artist';
+          artist.textContent = t.artist.slice(0, 90);
+          meta.appendChild(artist);
+        }
+        row.append(num, meta);
+        const url = R().safeUrl(t.url);
+        if (url && !(ctx && ctx.editing)) {
+          const out = document.createElement('a');
+          out.className = 'mpw-pl-out';
+          out.textContent = '↗';
+          out.href = url;
+          out.target = '_blank';
+          out.rel = 'noopener nofollow';
+          out.setAttribute('aria-label', 'Open track');
+          row.appendChild(out);
+        }
+        el.appendChild(row);
+      });
+      if (!tracks.length) {
+        const hint = document.createElement('div');
+        hint.className = 'mpw-gb-note';
+        hint.textContent = 'a little tracklist, like the back of a burned CD';
+        el.appendChild(hint);
+      }
+      return el;
+    },
+
+    album(props) {
+      const el = card(cardTitle(props, 'photo album'));
+      const grid = document.createElement('div');
+      grid.className = props.layout === 'grid' ? 'mpw-album-grid' : 'mpw-album-strip';
+      const photos = Array.isArray(props.photos)
+        ? props.photos.filter((id) => Number.isInteger(id)).slice(0, 6) : [];
+      const slots = Math.max(photos.length, props.layout === 'grid' ? 4 : 3);
+      for (let i = 0; i < slots; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'mpw-album-cell';
+        if (i < photos.length) {
+          const img = document.createElement('img');
+          img.src = '/assets/' + photos[i]; // only ever our own asset route
+          img.alt = '';
+          img.loading = 'lazy';
+          img.draggable = false;
+          cell.appendChild(img);
+        } else {
+          cell.classList.add('mpw-album-empty');
+          cell.textContent = '✦';
+        }
+        grid.appendChild(cell);
+      }
+      el.appendChild(grid);
+      return el;
+    },
+
+    popup(props, ctx) {
+      const el = document.createElement('div');
+      el.className = 'mpw mpw-popup';
+      const title = document.createElement('div');
+      title.className = 'mpw-popup-title';
+      const icon = document.createElement('span');
+      icon.className = 'mpw-popup-icon';
+      icon.textContent = '♡';
+      const titleText = document.createElement('span');
+      titleText.textContent = typeof props.title === 'string' && props.title.trim()
+        ? props.title.slice(0, 120) : 'Are you sure you want to leave?';
+      title.append(icon, titleText);
+      const body = document.createElement('div');
+      body.className = 'mpw-popup-body';
+      body.textContent = typeof props.body === 'string' ? props.body.slice(0, 400) : '';
+      const acts = document.createElement('div');
+      acts.className = 'mpw-popup-acts';
+      const stay = document.createElement('button');
+      stay.className = 'mpw-popup-stay';
+      stay.textContent = typeof props.stayLabel === 'string' && props.stayLabel.trim()
+        ? props.stayLabel.slice(0, 40) : 'stay a while ♡';
+      const bye = document.createElement('button');
+      bye.className = 'mpw-popup-bye';
+      bye.textContent = typeof props.byeLabel === 'string' && props.byeLabel.trim()
+        ? props.byeLabel.slice(0, 40) : 'ok bye :(';
+      const editing = !!(ctx && ctx.editing);
+      stay.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (editing) return;
+        el.classList.remove('mpw-popup-pulse');
+        void el.offsetWidth; // restart the little thank-you pulse
+        el.classList.add('mpw-popup-pulse');
+      });
+      bye.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (editing) return;
+        const blockEl = el.closest('.mp-block');
+        if (blockEl) {
+          try { sessionStorage.setItem('mp_popup_' + (blockEl.dataset.blockId || ''), '1'); } catch {}
+          blockEl.style.display = 'none';
+        }
+      });
+      acts.append(stay, bye);
+      el.append(title, body, acts);
+      if (!editing) {
+        // If this visitor already said bye this session, keep it hidden.
+        requestAnimationFrame(() => {
+          const blockEl = el.closest('.mp-block');
+          if (!blockEl) return;
+          try {
+            if (sessionStorage.getItem('mp_popup_' + (blockEl.dataset.blockId || ''))) {
+              blockEl.style.display = 'none';
+            }
+          } catch {}
+        });
+      }
+      return el;
+    },
+
     guestbook(props, ctx) {
-      const el = card('guestbook');
+      const el = card(cardTitle(props, 'guestbook'));
       el.classList.add('mpw-guestbook');
       const gb = ctx && ctx.guestbook;
       if (!gb) {

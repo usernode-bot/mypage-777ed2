@@ -1,7 +1,8 @@
-// MyPage app shell: token plumbing, tiny router, My Pages home, the
-// five-door chooser, the FanPages directory, the account-less /make flow
-// (local drafts + migration on sign-in), and gift claiming. The editor
-// lives in editor.js; page rendering in renderer.js/widgets.js.
+// MyPage app shell: token plumbing, tiny router, the Home welcome screen,
+// the Templates gallery (accurate scaled previews), My Pages, Discover
+// (the directory), the account-less /make flow (local drafts + migration
+// on sign-in), and gift claiming. The editor lives in editor.js; page
+// rendering in renderer.js/widgets.js.
 (function () {
   'use strict';
 
@@ -65,13 +66,40 @@
     setTimeout(() => t.remove(), 2200);
   }
 
+  // Simple line icons for the shell chrome (no emoji icons in nav/buttons —
+  // emoji stay welcome inside page content and pickers). App-authored SVG.
+  const MPIcons = (() => {
+    const svg = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+    return {
+      home: svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>'),
+      templates: svg('<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>'),
+      plus: svg('<path d="M12 5v14M5 12h14"/>'),
+      discover: svg('<circle cx="12" cy="12" r="9"/><path d="m14.9 9.1-1.7 4.1-4.1 1.7 1.7-4.1z"/>'),
+      pages: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+    };
+  })();
+
   // Minimal modal used everywhere (own implementation so the app has no
-  // hard dependency on the hosted kit being reachable).
+  // hard dependency on the hosted kit being reachable). Every dialog gets
+  // an explicit ✕ close button so pickers never feel stuck.
   function openModal({ title, contentEl, actions = [], onClose }) {
     const backdrop = document.createElement('div');
     backdrop.className = 'mp-backdrop';
     const modal = document.createElement('div');
     modal.className = 'mp-modal';
+    const ctl = {
+      el: modal,
+      close() {
+        backdrop.remove();
+        if (onClose) onClose();
+      },
+    };
+    const x = document.createElement('button');
+    x.className = 'mp-modal-x';
+    x.setAttribute('aria-label', 'Close');
+    x.textContent = '✕';
+    x.addEventListener('click', () => ctl.close());
+    modal.appendChild(x);
     if (title) {
       const h = document.createElement('h2');
       h.className = 'mp-modal-title';
@@ -85,13 +113,6 @@
       footer.className = 'mp-modal-actions';
       modal.appendChild(footer);
     }
-    const ctl = {
-      el: modal,
-      close() {
-        backdrop.remove();
-        if (onClose) onClose();
-      },
-    };
     actions.forEach((a) => {
       const b = document.createElement('button');
       b.className = a.accent ? 'mp-btn mp-btn-accent' : 'mp-btn';
@@ -113,6 +134,85 @@
     character: { emoji: '📚', door: 'a character', chip: 'shrine', nameLabel: 'The character' },
   };
 
+  // ---------------------------------------------------------------- catalog
+
+  // The shell needs the catalog (template docs + sticker art) for accurate
+  // previews on Home / Templates / Discover. Cached for the session; also
+  // primes the renderer's sticker map.
+  let shellCatalog = null;
+  let shellCatalogPromise = null;
+  function loadCatalog() {
+    if (shellCatalog) return Promise.resolve(shellCatalog);
+    if (!shellCatalogPromise) {
+      shellCatalogPromise = api('/api/public/catalog').then((cat) => {
+        shellCatalog = cat;
+        window.PageRenderer.setCatalog(cat);
+        return cat;
+      }).catch((err) => { shellCatalogPromise = null; throw err; });
+    }
+    return shellCatalogPromise;
+  }
+
+  function featuredTemplates(cat) {
+    return (cat.templates || []).filter((t) => t.featured && t.content);
+  }
+
+  // ------------------------------------------------------ template previews
+
+  // Accurate miniature: the template's REAL doc rendered through the shared
+  // PageRenderer at page width (720px), then scaled to fit the card. Never
+  // an illustration or a placeholder.
+  function templatePreview(content, opts = {}) {
+    const thumb = document.createElement('div');
+    thumb.className = 'mp-tpl-thumb';
+    if (opts.height) thumb.style.height = opts.height + 'px';
+    const scaler = document.createElement('div');
+    scaler.className = 'mp-tpl-scaler';
+    thumb.appendChild(scaler);
+    try {
+      window.PageRenderer.render(content, scaler, { editing: true, visits: 128 });
+    } catch { /* a malformed doc must never break the gallery */ }
+    // Scale two frames later: the renderer refits section heights on the
+    // next frame, and measuring after that keeps the mini layout faithful.
+    // maxScale keeps wide cards honest miniatures (centered when capped)
+    // instead of near-1:1 crops.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const w = thumb.clientWidth;
+      if (!w) return;
+      const k = Math.min(w / 720, opts.maxScale || 1);
+      scaler.style.transform = 'scale(' + k + ')';
+      scaler.style.left = Math.max(0, (w - 720 * k) / 2) + 'px';
+    }));
+    return thumb;
+  }
+
+  // Full-screen preview of the real template (Templates screen).
+  function openTemplateFullPreview(t) {
+    const overlay = document.createElement('div');
+    overlay.className = 'mp-fullpreview';
+    const bar = document.createElement('div');
+    bar.className = 'mp-fullpreview-bar';
+    const back = document.createElement('button');
+    back.className = 'mp-iconbtn';
+    back.setAttribute('aria-label', 'Close preview');
+    back.textContent = '✕';
+    back.addEventListener('click', () => overlay.remove());
+    const title = document.createElement('div');
+    title.className = 'mp-fullpreview-title';
+    title.textContent = t.name;
+    const use = document.createElement('button');
+    use.className = 'mp-btn mp-btn-accent mp-btn-sm';
+    use.textContent = 'Use template';
+    use.addEventListener('click', () => { overlay.remove(); openUseTemplate(t); });
+    bar.append(back, title, use);
+    const mount = document.createElement('div');
+    overlay.append(bar, mount);
+    document.body.appendChild(overlay);
+    window.PageRenderer.render(t.content, mount, {
+      editing: true, visits: 128, footer: true, footerStyle: t.content.footerStyle,
+    });
+  }
+
   // ------------------------------------------------------------------ router
 
   function navigate(path, replace) {
@@ -126,8 +226,10 @@
     const m = p.match(/^\/edit\/(\d+)$/);
     if (m) return window.MPEditor.open(parseInt(m[1], 10));
     if (p === '/make' || p === '/make/edit') return makeFlow(p === '/make/edit');
-    if (p === '/directory') return renderDirectory();
-    renderMyPages();
+    if (p === '/directory' || p === '/discover') return renderDirectory();
+    if (p === '/templates') return renderTemplates();
+    if (p === '/pages') return renderMyPages();
+    renderHome();
   }
 
   // Screenshot-state deep link: the editor's chrome can't be reached by
@@ -166,9 +268,9 @@
 
   // ------------------------------------------------------------- appearance
 
-  // The appearance control: one round chip in the app's own header (My Pages,
-  // Directory, /make). The editor puts it in the ⋯ menu instead — its top bar
-  // is already full. Icon shows what's IN EFFECT, not what's chosen.
+  // The appearance control: one round chip in the app's own header. The
+  // editor puts it in the ⋯ menu instead — its top bar is already full.
+  // Icon shows what's IN EFFECT, not what's chosen.
   function themeButton() {
     const emoji = window.MPTheme ? MPTheme.LABELS[MPTheme.resolved()].emoji : '☀️';
     return `<button id="mp-theme-btn" class="mp-themebtn un-touch-target" data-testid="theme-toggle"
@@ -215,48 +317,292 @@
     });
   }
 
-  // ------------------------------------------------------------ page header
+  // -------------------------------------------------- header + bottom nav
 
-  function header(active) {
-    const canMake = !!token;
+  function header() {
     return `
       <header class="mp-home-header">
-        <div>
-          <div class="mp-kicker">your corner of the internet</div>
-          <h1 class="mp-wordmark">MyPage</h1>
-        </div>
+        <h1 class="mp-wordmark">MyPage</h1>
         <div class="mp-home-actions">
           ${themeButton()}
-          ${canMake
-            ? '<button id="mp-new-btn" class="mp-btn mp-btn-accent">＋ New page</button>'
-            : '<a href="/make" data-nav="/make" class="mp-btn mp-btn-accent" style="text-decoration:none;">＋ make your own</a>'}
         </div>
-      </header>
-      <nav class="mp-tabs">
-        ${token ? `<button class="mp-tab${active === 'mine' ? ' mp-tab-on' : ''}" data-nav="/">My Pages</button>` : ''}
-        <button class="mp-tab${active === 'directory' ? ' mp-tab-on' : ''}" data-nav="/directory">Directory</button>
+      </header>`;
+  }
+
+  // Persistent bottom navigation: Home · Templates · Create · Discover ·
+  // Pages. Create is the emphasized center button. Shown on the four shell
+  // screens only — never inside the editor or the public view.
+  function bottomNav(active) {
+    const item = (key, label, path) => `
+      <button class="mp-nav-item${active === key ? ' mp-nav-on' : ''}" data-nav="${path}" aria-label="${label}">
+        ${MPIcons[key]}<span>${label}</span><span class="mp-nav-dot"></span>
+      </button>`;
+    return `
+      <nav class="mp-bottomnav" data-testid="bottom-nav">
+        ${item('home', 'Home', '/')}
+        ${item('templates', 'Templates', '/templates')}
+        <button class="mp-nav-create" id="mp-nav-create" aria-label="Create a page">${MPIcons.plus}</button>
+        ${item('discover', 'Discover', '/directory')}
+        ${item('pages', 'Pages', '/pages')}
       </nav>`;
   }
 
-  function wireHeader(app) {
+  function wireShell(app) {
     app.querySelectorAll('[data-nav]').forEach((el) => {
       el.addEventListener('click', (e) => { e.preventDefault(); navigate(el.dataset.nav); });
     });
     wireThemeButton(app);
-    const newBtn = app.querySelector('#mp-new-btn');
-    if (newBtn) newBtn.addEventListener('click', () => openChooser(false));
+    const create = app.querySelector('#mp-nav-create');
+    // Create opens the Templates gallery — its first card is "Start blank".
+    if (create) create.addEventListener('click', () => navigate('/templates'));
+  }
+
+  // -------------------------------------------------------------------- home
+
+  // Card thumbnails for the flagship templates: final reference images
+  // provided by the owner, committed as static assets and used verbatim
+  // (cropped, never redrawn). Templates without one fall back to the
+  // accurate scaled live preview.
+  const TPL_IMAGES = {
+    'scene-page': '/img/tpl-scene.jpg',
+    'bestie-page': '/img/tpl-bestie.jpg',
+    'y2k-page': '/img/tpl-y2k.jpg',
+  };
+
+  async function renderHome() {
+    const app = document.getElementById('app');
+    app.innerHTML = header() + `
+      <main class="mp-home mp-has-nav" data-testid="home">
+        <section class="mp-hero" data-testid="home-hero">
+          <h2 class="mp-hero-title">Make a page</h2>
+          <p class="mp-hero-sub">For yourself, a friend, or your pet.</p>
+          <div class="mp-hero-acts">
+            <button class="mp-btn mp-btn-accent" data-nav="/templates">Start with a template →</button>
+            <button class="mp-link-quiet" data-nav="/templates">Browse templates</button>
+          </div>
+        </section>
+        <h3 class="mp-h2">Start with a template</h3>
+        <div id="mp-home-carousel" class="mp-carousel" data-testid="home-carousel"></div>
+        <div id="mp-home-mine"></div>
+      </main>` + bottomNav('home');
+    wireShell(app);
+
+    // Signed in with pages already? Keep home useful after day one.
+    if (token) {
+      api('/api/me/pages').then(({ pages }) => {
+        if (!pages.length) return;
+        const mount = document.getElementById('mp-home-mine');
+        if (!mount) return;
+        const label = document.createElement('h3');
+        label.className = 'mp-h2';
+        label.textContent = 'Your pages';
+        mount.appendChild(label);
+        pages.slice(0, 3).forEach((p) => mount.appendChild(myPageCard(p)));
+        if (pages.length > 3) {
+          const all = document.createElement('button');
+          all.className = 'mp-link-quiet';
+          all.textContent = 'All your pages →';
+          all.addEventListener('click', () => navigate('/pages'));
+          mount.appendChild(all);
+        }
+      }).catch(() => {});
+    }
+
+    // Template carousel: image-first cards. Tapping one opens the real
+    // template full-screen with its "Use template" action.
+    try {
+      const cat = await loadCatalog();
+      const carousel = document.getElementById('mp-home-carousel');
+      if (!carousel) return;
+      carousel.textContent = '';
+      featuredTemplates(cat).forEach((t) => {
+        const tile = document.createElement('button');
+        tile.className = 'mp-tpl-tile';
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'mp-tpl-tile-img';
+        if (TPL_IMAGES[t.key]) {
+          const img = document.createElement('img');
+          img.src = TPL_IMAGES[t.key];
+          img.alt = t.name;
+          img.loading = 'lazy';
+          img.draggable = false;
+          imgWrap.appendChild(img);
+        } else {
+          const prev = templatePreview(t.content, { height: 312 });
+          prev.style.height = '100%';
+          imgWrap.appendChild(prev);
+        }
+        const name = document.createElement('div');
+        name.className = 'mp-tpl-tile-name';
+        name.textContent = t.name;
+        const tag = document.createElement('div');
+        tag.className = 'mp-tpl-tile-tag';
+        tag.textContent = t.tagline || t.description || '';
+        tile.append(imgWrap, name, tag);
+        tile.addEventListener('click', () => openTemplateFullPreview(t));
+        carousel.appendChild(tile);
+      });
+    } catch (err) {
+      const carousel = document.getElementById('mp-home-carousel');
+      if (carousel) carousel.innerHTML = `<div class="mp-muted" style="padding:10px 4px;font-size:13px;">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  // --------------------------------------------------------------- templates
+
+  let tplState = { q: '', filter: 'all' };
+
+  const TPL_FILTERS = [
+    ['all', 'All'], ['scene', 'Scene'], ['bestie', 'Bestie'],
+    ['y2k', 'Y2K'], ['pets', 'Pets'], ['styles', 'Styles'],
+  ];
+
+  function templateMatchesFilter(t, filter) {
+    switch (filter) {
+      case 'scene': return t.key === 'scene-page';
+      case 'bestie': return t.key === 'bestie-page';
+      case 'y2k': return t.key === 'y2k-page' || t.key === 'y2k';
+      case 'pets': return t.key === 'pet-fan-page' || t.subject_type === 'pet';
+      case 'styles': return !t.featured;
+      default: return true;
+    }
+  }
+
+  async function renderTemplates() {
+    const app = document.getElementById('app');
+    app.innerHTML = header() + `
+      <main class="mp-home mp-has-nav" data-testid="templates">
+        <section class="mp-hero" style="padding-bottom:0;">
+          <h2 class="mp-hero-title" style="font-size:30px;">Start with a template.</h2>
+          <p class="mp-hero-sub">Pick a starting point, then make it completely yours.</p>
+        </section>
+        <input id="mp-tpl-search" class="mp-search" type="search" placeholder="Search templates…" value="${escapeHtml(tplState.q)}">
+        <div class="mp-panel-row" id="mp-tpl-filters" style="margin-bottom:12px;"></div>
+        <div id="mp-tpl-list"></div>
+      </main>` + bottomNav('templates');
+    wireShell(app);
+
+    const filterRow = app.querySelector('#mp-tpl-filters');
+    TPL_FILTERS.forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.className = 'mp-chip mp-chip-btn' + (tplState.filter === key ? ' mp-pill-on' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        tplState.filter = key;
+        filterRow.querySelectorAll('.mp-chip').forEach((x) => x.classList.remove('mp-pill-on'));
+        b.classList.add('mp-pill-on');
+        renderTemplateList();
+      });
+      filterRow.appendChild(b);
+    });
+
+    let searchTimer = null;
+    app.querySelector('#mp-tpl-search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        tplState.q = e.target.value.trim().toLowerCase();
+        renderTemplateList();
+      }, 150);
+    });
+
+    try { await loadCatalog(); } catch (err) {
+      app.querySelector('#mp-tpl-list').innerHTML = `<div class="mp-muted" style="padding:20px 4px;">${escapeHtml(err.message)}</div>`;
+      return;
+    }
+    renderTemplateList();
+  }
+
+  function renderTemplateList() {
+    const list = document.getElementById('mp-tpl-list');
+    if (!list || !shellCatalog) return;
+    list.textContent = '';
+
+    // "Start blank" leads the gallery — the classic chooser path unchanged.
+    if (tplState.filter === 'all' && !tplState.q) {
+      const blank = document.createElement('button');
+      blank.className = 'mp-tpl-card';
+      blank.setAttribute('data-testid', 'start-blank');
+      blank.innerHTML = `
+        <div class="mp-tpl-body" style="padding-top:16px;">
+          <div class="mp-tpl-name">Start blank</div>
+          <div class="mp-tpl-desc">An empty canvas — pick who it’s for and decorate from scratch.</div>
+          <span class="mp-btn mp-btn-quiet mp-btn-sm">Start blank</span>
+        </div>`;
+      blank.addEventListener('click', () => {
+        if (token) openChooser();
+        else navigate('/make');
+      });
+      list.appendChild(blank);
+    }
+
+    const q = tplState.q;
+    const matches = (shellCatalog.templates || []).filter((t) => {
+      if (!t.content) return false;
+      if (!templateMatchesFilter(t, tplState.filter)) return false;
+      if (!q) return true;
+      return [t.name, t.description, t.tagline].some((s) => typeof s === 'string' && s.toLowerCase().includes(q));
+    });
+    // Featured first, matching the catalog's own ordering promise.
+    matches.sort((a, b) => (b.featured === true) - (a.featured === true));
+
+    if (!matches.length) {
+      const none = document.createElement('div');
+      none.className = 'mp-muted';
+      none.style.cssText = 'padding:24px 4px;text-align:center;';
+      none.textContent = 'no templates match — try another word';
+      list.appendChild(none);
+      return;
+    }
+
+    matches.forEach((t, i) => {
+      const card = document.createElement('div');
+      card.className = 'mp-tpl-card';
+      if (t.featured && i === 0) card.setAttribute('data-testid', 'featured-template');
+      const thumb = templatePreview(t.content, { height: 210, maxScale: 0.42 });
+      thumb.addEventListener('click', () => openTemplateFullPreview(t));
+      card.appendChild(thumb);
+      const body = document.createElement('div');
+      body.className = 'mp-tpl-body';
+      const name = document.createElement('div');
+      name.className = 'mp-tpl-name';
+      name.textContent = t.name;
+      const desc = document.createElement('div');
+      desc.className = 'mp-tpl-desc';
+      desc.textContent = t.tagline || t.description || '';
+      const acts = document.createElement('div');
+      acts.className = 'mp-tpl-acts';
+      const use = document.createElement('button');
+      use.className = 'mp-btn mp-btn-accent mp-btn-sm';
+      use.textContent = 'Use template';
+      use.addEventListener('click', () => openUseTemplate(t));
+      const peek = document.createElement('button');
+      peek.className = 'mp-btn mp-btn-quiet mp-btn-sm';
+      peek.textContent = 'Preview';
+      peek.addEventListener('click', () => openTemplateFullPreview(t));
+      acts.append(use, peek);
+      body.append(name, desc, acts);
+      card.appendChild(body);
+      list.appendChild(card);
+    });
+  }
+
+  // "Use template" asks only the minimum: who it's for (prefilled per
+  // template) and a title — then straight into the editor, fully applied.
+  function openUseTemplate(t) {
+    const subject = SUBJECTS[t.subject_type] ? t.subject_type : 'self';
+    openCreateForm(subject, !token, { template: t });
   }
 
   // ---------------------------------------------------------------- My Pages
 
   async function renderMyPages() {
-    if (!token) return renderDirectory(); // account-less landing = the gallery
+    if (!token) return navigate('/make', true); // account-less: go decorate
     const app = document.getElementById('app');
-    app.innerHTML = header('mine') + `
-      <main class="mp-home" data-testid="my-pages">
+    app.innerHTML = header() + `
+      <main class="mp-home mp-has-nav" data-testid="my-pages">
         <div class="mp-muted" style="padding:24px 4px;">loading your pages…</div>
-      </main>`;
-    wireHeader(app);
+      </main>` + bottomNav('pages');
+    wireShell(app);
 
     const main = app.querySelector('main');
     let pages, gifts = [];
@@ -288,6 +634,11 @@
         <div class="mp-empty-art">✨🖼️🐾</div>
         <p><b>No pages yet.</b> Make one — for yourself, your best friend, your dog, your OC, or your comfort character.</p>
         <p class="mp-muted">No feed here. Just your pages.</p>`;
+      const start = document.createElement('button');
+      start.className = 'mp-btn mp-btn-accent';
+      start.textContent = 'Create a page';
+      start.addEventListener('click', () => navigate('/templates'));
+      empty.appendChild(start);
       main.appendChild(empty);
       return;
     }
@@ -298,31 +649,33 @@
     const list = document.createElement('div');
     list.className = 'mp-card-list';
     main.append(label, list);
-    pages.forEach((p) => {
-      const meta = SUBJECTS[p.subject_type] || SUBJECTS.self;
-      const card = document.createElement('button');
-      card.className = 'mp-card';
-      const status = p.published
-        ? `<span class="mp-status-pub">published · /p/${escapeHtml(p.slug)}</span>`
-        : `<span class="mp-status-draft">draft</span> · last touched ${escapeHtml(timeAgo(p.updated_at))}`;
-      const visits = Number(p.visits) > 0 ? ` · ${Number(p.visits)} visits` : '';
-      const pending = p.pending_signs > 0
-        ? `<span class="mp-badge">${p.pending_signs} sign${p.pending_signs === 1 ? '' : 's'} to approve</span>` : '';
-      const delisted = p.directory_delisted_by_report ? '<span class="mp-badge mp-badge-danger">reported</span>' : '';
-      card.innerHTML = `
-        <div class="mp-card-row1">
-          <span class="mp-card-title">${escapeHtml(p.title)}</span>
-          <span class="mp-chip">${meta.emoji} ${escapeHtml(meta.chip)}</span>
-        </div>
-        <div class="mp-card-row2">${status}${visits} ${pending} ${delisted}</div>`;
-      card.addEventListener('click', () => navigate('/edit/' + p.id));
-      list.appendChild(card);
-    });
+    pages.forEach((p) => list.appendChild(myPageCard(p)));
     const foot = document.createElement('p');
     foot.className = 'mp-muted';
     foot.style.cssText = 'text-align:center;padding:22px 8px 8px;';
     foot.textContent = 'no feed here — just your pages';
     main.appendChild(foot);
+  }
+
+  function myPageCard(p) {
+    const meta = SUBJECTS[p.subject_type] || SUBJECTS.self;
+    const card = document.createElement('button');
+    card.className = 'mp-card';
+    const status = p.published
+      ? `<span class="mp-status-pub">published · /p/${escapeHtml(p.slug)}</span>`
+      : `<span class="mp-status-draft">draft</span> · last touched ${escapeHtml(timeAgo(p.updated_at))}`;
+    const visits = Number(p.visits) > 0 ? ` · ${Number(p.visits)} visits` : '';
+    const pending = p.pending_signs > 0
+      ? `<span class="mp-badge">${p.pending_signs} sign${p.pending_signs === 1 ? '' : 's'} to approve</span>` : '';
+    const delisted = p.directory_delisted_by_report ? '<span class="mp-badge mp-badge-danger">reported</span>' : '';
+    card.innerHTML = `
+      <div class="mp-card-row1">
+        <span class="mp-card-title">${escapeHtml(p.title)}</span>
+        <span class="mp-chip">${meta.emoji} ${escapeHtml(meta.chip)}</span>
+      </div>
+      <div class="mp-card-row2">${status}${visits} ${pending} ${delisted}</div>`;
+    card.addEventListener('click', () => navigate('/edit/' + p.id));
+    return card;
   }
 
   function draftBanner(draft) {
@@ -342,6 +695,7 @@
           method: 'POST',
           body: { title: draft.title, subject_type: draft.subject_type, subject_name: draft.subject_name, content: draft.content },
         });
+        if (draft.template) rememberTemplate(page.id, draft.template);
         MPDraft.clear();
         toast('Draft imported ✓');
         navigate('/edit/' + page.id);
@@ -406,14 +760,19 @@
     });
   }
 
-  // --------------------------------------------------------------- directory
+  // ------------------------------------------------------ Discover (gallery)
 
-  let dirState = { subject: '', order: 'recent' };
+  let dirState = { subject: '', order: 'recent', q: '' };
 
   async function renderDirectory() {
     const app = document.getElementById('app');
-    app.innerHTML = header('directory') + `
-      <main class="mp-home" data-testid="directory">
+    app.innerHTML = header() + `
+      <main class="mp-home mp-has-nav" data-testid="directory">
+        <section class="mp-hero" style="padding-bottom:0;">
+          <h2 class="mp-hero-title" style="font-size:30px;">Discover</h2>
+          <p class="mp-hero-sub">A gallery to wander, not a feed to scroll.</p>
+        </section>
+        <input id="mp-dir-search" class="mp-search" type="search" placeholder="Search by title or creator…" value="${escapeHtml(dirState.q)}">
         <div class="mp-dir-filters">
           <div class="mp-panel-row" id="mp-dir-subjects"></div>
           <div class="mp-panel-row">
@@ -422,19 +781,20 @@
         </div>
         <div id="mp-dir-grid" class="mp-dir-grid"><div class="mp-muted" style="padding:20px 4px;">wandering the gallery…</div></div>
         <p class="mp-muted" style="text-align:center;padding:20px 8px;font-size:12.5px;">a gallery to wander, not a feed to scroll</p>
-      </main>`;
-    wireHeader(app);
+      </main>` + bottomNav('discover');
+    wireShell(app);
+    loadCatalog().catch(() => {}); // sticker art for the mini previews
 
     const subjectsRow = app.querySelector('#mp-dir-subjects');
     const filters = [['', '✨ everything'], ['self', '🌟 corners'], ['friend', '💌 for friends'], ['pet', '🐾 pets'], ['oc', '🎭 OCs'], ['character', '📚 shrines']];
     filters.forEach(([value, label]) => {
       const b = document.createElement('button');
-      b.className = 'mp-chip mp-chip-btn' + (dirState.subject === value ? ' mp-chip-on' : '');
+      b.className = 'mp-chip mp-chip-btn' + (dirState.subject === value ? ' mp-pill-on' : '');
       b.textContent = label;
       b.addEventListener('click', () => {
         dirState.subject = value;
-        subjectsRow.querySelectorAll('.mp-chip').forEach((x) => x.classList.remove('mp-chip-on'));
-        b.classList.add('mp-chip-on');
+        subjectsRow.querySelectorAll('.mp-chip').forEach((x) => x.classList.remove('mp-pill-on'));
+        b.classList.add('mp-pill-on');
         loadDirectory();
       });
       subjectsRow.appendChild(b);
@@ -448,6 +808,15 @@
       loadDirectory();
     });
 
+    let searchTimer = null;
+    app.querySelector('#mp-dir-search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        dirState.q = e.target.value.trim();
+        loadDirectory();
+      }, 250);
+    });
+
     loadDirectory();
   }
 
@@ -457,14 +826,18 @@
     try {
       const q = new URLSearchParams();
       if (dirState.subject) q.set('subject', dirState.subject);
+      if (dirState.q) q.set('q', dirState.q);
       q.set('order', dirState.order);
-      const { pages } = await api('/api/public/directory?' + q.toString());
+      const [{ pages }] = await Promise.all([
+        api('/api/public/directory?' + q.toString()),
+        loadCatalog().catch(() => null),
+      ]);
       grid.textContent = '';
       if (!pages.length) {
         const none = document.createElement('div');
         none.className = 'mp-muted';
         none.style.cssText = 'padding:26px 4px;text-align:center;';
-        none.textContent = 'nothing here yet — be the first to decorate';
+        none.textContent = dirState.q ? 'nothing matches — try another word' : 'nothing here yet — be the first to decorate';
         grid.appendChild(none);
         return;
       }
@@ -482,24 +855,22 @@
     a.target = '_blank';
     a.rel = 'noopener';
 
-    const preview = document.createElement('div');
-    preview.className = 'mp-dir-preview';
-    const bg = p.first_section && p.first_section.background;
-    const css = window.PageRenderer.bgToCss(bg);
-    for (const k in css) preview.style[k] = css[k];
-    // sample the section's first text block for a titled peek
-    const firstText = p.first_section && Array.isArray(p.first_section.blocks)
-      ? p.first_section.blocks.find((b) => b && b.type === 'text') : null;
-    const peek = document.createElement('span');
-    peek.className = 'mp-dir-peek';
-    if (firstText && firstText.props) {
-      peek.textContent = String(firstText.props.text || '').slice(0, 40);
-      peek.style.fontFamily = window.PageRenderer.FONTS[firstText.props.font] || '';
-      peek.style.color = window.PageRenderer.safeColor(firstText.props.color, '#1F2B47');
+    // Mini live preview of the page's first section — the real thing,
+    // scaled, through the shared renderer. Falls back to bg + text peek.
+    const fs = p.first_section;
+    if (fs && Array.isArray(fs.blocks) && fs.blocks.length) {
+      a.appendChild(templatePreview({ version: 1, sections: [fs] }, { height: 110 }));
     } else {
+      const preview = document.createElement('div');
+      preview.className = 'mp-dir-preview';
+      const css = window.PageRenderer.bgToCss(fs && fs.background);
+      for (const k in css) preview.style[k] = css[k];
+      const peek = document.createElement('span');
+      peek.className = 'mp-dir-peek';
       peek.textContent = p.title;
+      preview.appendChild(peek);
+      a.appendChild(preview);
     }
-    preview.appendChild(peek);
 
     const info = document.createElement('div');
     info.className = 'mp-dir-info';
@@ -508,9 +879,18 @@
     title.textContent = p.title;
     const sub = document.createElement('div');
     sub.className = 'mp-dir-sub';
-    sub.textContent = `${meta.emoji} ${meta.chip}` + (Number(p.visits) > 0 ? ` · ${p.visits} visits` : '');
+    const bits = [`${meta.emoji} ${meta.chip}`];
+    if (p.made_by_username) bits.push('by ' + p.made_by_username);
+    sub.textContent = bits.join(' · ');
+    const sub2 = document.createElement('div');
+    sub2.className = 'mp-dir-sub';
+    const bits2 = [];
+    if (Number(p.visits) > 0) bits2.push(`${p.visits} visits`);
+    if (p.updated_at) bits2.push('updated ' + timeAgo(p.updated_at));
+    sub2.textContent = bits2.join(' · ');
     info.append(title, sub);
-    a.append(preview, info);
+    if (bits2.length) info.appendChild(sub2);
+    a.append(info);
     return a;
   }
 
@@ -532,7 +912,10 @@
         <p class="mp-muted" style="text-align:center;max-width:340px;margin:6px auto 20px;">a small loud page — for yourself, a friend, your pet, your OC, or your comfort character. it saves on this device; an account only matters when you publish.</p>
         <div class="mp-doors" id="mp-make-doors"></div>
         <div id="mp-make-resume"></div>
-        <p style="text-align:center;margin-top:26px;"><a href="/directory" data-nav="/directory" style="color:var(--accent-deep);font-weight:700;font-size:13.5px;">or wander the directory →</a></p>
+        <p style="text-align:center;margin-top:26px;">
+          <a href="/templates" data-nav="/templates" style="color:var(--accent-deep);font-weight:700;font-size:13.5px;">start from a template →</a><br>
+          <a href="/directory" data-nav="/directory" style="color:var(--accent-deep);font-weight:700;font-size:13.5px;">or wander Discover →</a>
+        </p>
       </main>`;
     app.querySelectorAll('[data-nav]').forEach((el) => {
       el.addEventListener('click', (e) => { e.preventDefault(); navigate(el.dataset.nav); });
@@ -574,8 +957,17 @@
     ctl = openModal({ title: 'A page for…', contentEl: content });
   }
 
-  function openCreateForm(subjectType, local) {
+  // Editor guidance plumbing: which template a page started from lives in
+  // localStorage (checklists are editor chrome, never page content).
+  function rememberTemplate(pageId, templateKey) {
+    try { localStorage.setItem('mp_tpl_' + pageId, templateKey); } catch {}
+  }
+
+  // opts.template — a catalog template row ({ key, name, content,
+  // subject_type, … }); the page starts fully decorated from it.
+  function openCreateForm(subjectType, local, opts = {}) {
     const meta = SUBJECTS[subjectType];
+    const tpl = opts.template && opts.template.content ? opts.template : null;
     const content = document.createElement('div');
     content.className = 'mp-form';
 
@@ -583,6 +975,7 @@
       <label class="mp-label">${escapeHtml(meta.nameLabel)}</label>
       <input id="mp-f-name" class="mp-input" maxlength="120" placeholder="${subjectType === 'pet' ? 'Biscuit' : subjectType === 'friend' ? 'their name' : subjectType === 'oc' ? 'Vex' : 'Mr. Darcy'}">` : '';
     content.innerHTML = `
+      ${tpl ? `<div class="mp-chip" style="background:var(--tint-accent);color:var(--accent-deep);margin-bottom:4px;">✨ starts from “${escapeHtml(tpl.name)}”</div>` : ''}
       ${nameField}
       <label class="mp-label">Page title</label>
       <input id="mp-f-title" class="mp-input" maxlength="120" placeholder="${subjectType === 'self' ? '☆ my corner ☆' : 'a page for someone special'}">
@@ -604,32 +997,36 @@
             if (!title) title = name ? name : '';
             if (!title) { titleEl.focus(); titleEl.classList.add('mp-input-bad'); return; }
             if (local) {
-              MPDraft.save({
+              const draft = {
                 title, subject_type: subjectType, subject_name: name || null,
-                content: {
-                  version: 1, cursor: null, song: null, footerStyle: null,
-                  sections: [{
-                    id: 's-' + Math.random().toString(36).slice(2, 8),
-                    minHeight: 480,
-                    background: { type: 'gradient', from: '#FDF3F9', to: '#EFE7FB', angle: 160 },
-                    blocks: [{
-                      id: 'b-' + Math.random().toString(36).slice(2, 8),
-                      type: 'text', x: 8, y: 56, w: 84, rotation: -2, z: 1,
-                      props: { text: title, font: 'fraunces', size: 34, color: '#1F2B47', bold: true, align: 'left', style: 'none' },
-                    }],
-                  }],
-                },
-              });
+                content: tpl
+                  ? JSON.parse(JSON.stringify(tpl.content))
+                  : {
+                      version: 1, cursor: null, song: null, footerStyle: null,
+                      sections: [{
+                        id: 's-' + Math.random().toString(36).slice(2, 8),
+                        minHeight: 480,
+                        background: { type: 'gradient', from: '#FDF3F9', to: '#EFE7FB', angle: 160 },
+                        blocks: [{
+                          id: 'b-' + Math.random().toString(36).slice(2, 8),
+                          type: 'text', x: 8, y: 56, w: 84, rotation: -2, z: 1,
+                          props: { text: title, font: 'fraunces', size: 34, color: '#1F2B47', bold: true, align: 'left', style: 'none' },
+                        }],
+                      }],
+                    },
+              };
+              if (tpl) draft.template = tpl.key;
+              MPDraft.save(draft);
               ctl.close();
               navigate('/make/edit');
               return;
             }
             btn.disabled = true; btn.textContent = 'Creating…';
             try {
-              const { page } = await api('/api/pages', {
-                method: 'POST',
-                body: { title, subject_type: subjectType, subject_name: name || null },
-              });
+              const body = { title, subject_type: subjectType, subject_name: name || null };
+              if (tpl) body.template = tpl.key; // server copies the template doc
+              const { page } = await api('/api/pages', { method: 'POST', body });
+              if (tpl) rememberTemplate(page.id, tpl.key);
               ctl.close();
               navigate('/edit/' + page.id);
             } catch (err) {
@@ -646,7 +1043,7 @@
 
   window.MP = {
     api, navigate, escapeHtml, timeAgo, slugify, toast, openModal, SUBJECTS,
-    renderMyPages, openAppearance,
+    renderMyPages, openAppearance, loadCatalog,
   };
 
   if (params.get('shot') === 'editor' && shotEditor()) {
