@@ -227,6 +227,8 @@
     if (m) return window.MPEditor.open(parseInt(m[1], 10));
     if (p === '/make' || p === '/make/edit') return makeFlow(p === '/make/edit');
     if (p === '/directory' || p === '/discover') return renderDirectory();
+    const td = p.match(/^\/templates\/([a-z0-9-]{1,40})$/);
+    if (td) return renderTemplateDetail(td[1]);
     if (p === '/templates') return renderTemplates();
     if (p === '/pages') return renderMyPages();
     renderHome();
@@ -369,6 +371,154 @@
     'y2k-page': '/img/tpl-y2k.jpg',
   };
 
+  // ------------------------------------------------- template detail pages
+
+  // Detail-page content for the flagship templates, faithful to the owner's
+  // mockups: wordmark treatment, tagline, how-it-works strip, the exact
+  // artwork inside a retro browser frame, recap + reassurance line. The
+  // hero is always the committed mockup crop — never a live re-render.
+  // (Pet Fan Page has no mockup yet: same shell, live miniature hero.)
+  const TPL_DETAILS = {
+    'scene-page': {
+      name: 'Scene Page',
+      wordmarkHtml: '<h2 class="mp-td-wordmark mp-td-wm-serif"><span class="mp-td-wm-deco">✦</span>Scene Page<span class="mp-td-wm-deco">✧</span></h2>',
+      tagline: 'Upload a real place and make it yours.',
+      address: 'yourspace.scene',
+      hero: '/img/detail-scene.jpg',
+      numbered: false,
+      steps: [
+        { icon: '☁️', title: 'Upload', sub: 'Add a photo of your space' },
+        { icon: '✨', title: 'Recreate', sub: 'We turn it into your scene' },
+        { icon: '🙂', title: 'Make it Yours', sub: 'Add widgets, styles, & more' },
+      ],
+      recap: [
+        { title: 'Upload Your Scene Photo', sub: 'Drag & drop or click to upload' },
+        { title: 'We’ll recreate it', sub: 'in your style with starter widgets' },
+        { title: 'You make it yours', sub: 'add, move, and customize anything' },
+      ],
+      foot: 'Fully customizable · Easy to edit · Yours forever',
+    },
+    'bestie-page': {
+      name: 'Bestie Page',
+      wordmarkHtml: '<h2 class="mp-td-wordmark mp-td-wm-serif"><span class="mp-td-wm-deco mp-td-wm-heart">♡</span>Bestie Page<span class="mp-td-wm-deco">✦</span></h2>',
+      tagline: 'Like a burned CD, but as a page.',
+      address: 'yourspace.scene',
+      hero: '/img/detail-bestie.jpg',
+      numbered: true,
+      steps: [
+        { title: 'Pick a photo', sub: 'Start with your favorite pic' },
+        { title: 'Customize your favorites', sub: 'Add the good stuff' },
+        { title: 'Gift it to your friend', sub: 'Share the love' },
+      ],
+      recap: [
+        { title: 'Start with a photo', sub: 'Upload your fave pic (or use ours)' },
+        { title: 'Add your memories + favorites', sub: 'Drop in songs, quotes, photos and everything in between' },
+        { title: 'Gift your page', sub: 'Share a link or send it as a gift' },
+      ],
+      foot: 'Fully customizable · Easy to edit · Yours forever',
+    },
+    'y2k-page': {
+      name: 'Y2K Personal Page',
+      wordmarkHtml: '<h2 class="mp-td-wordmark mp-td-wm-y2k">Y2K<span class="mp-td-wm-deco">✦</span></h2><div class="mp-td-wm-sub">personal page</div><span class="mp-td-pill">template builder ♡</span>',
+      tagline: 'Your own desktop-era corner.',
+      address: 'yourpage.y2k',
+      hero: '/img/detail-y2k.jpg',
+      numbered: true,
+      steps: [
+        { title: 'Pick a photo', sub: 'Upload your pic. This is your space.' },
+        { title: 'Add your faves', sub: 'Drop in widgets for music, movies, moods + more.' },
+        { title: 'Make it yours', sub: 'Customize everything until it feels so you.' },
+      ],
+      recap: [
+        { title: '1. Upload your photo', sub: 'Make it yours. Your photo is the heart of your page.' },
+        { title: '2. Drop in widgets', sub: 'Add music, movies, GIFs, moods, links & more.' },
+        { title: '3. Customize anything', sub: 'Move, resize, edit, and style until it’s so you.' },
+      ],
+      foot: 'It’s your world. Make it iconic. 💗',
+    },
+    'pet-fan-page': {
+      name: 'Pet Fan Page',
+      wordmarkHtml: '<h2 class="mp-td-wordmark mp-td-wm-serif"><span class="mp-td-wm-deco">🐾</span>Pet Fan Page<span class="mp-td-wm-deco">✦</span></h2>',
+      tagline: 'For your favorite little icon.',
+      address: 'theicon.page',
+      hero: null, // no owner mockup yet — live miniature of the real doc
+      numbered: true,
+      steps: [
+        { title: 'Add their portrait', sub: 'Replace it with your pet’s best photo' },
+        { title: 'Fill the lists', sub: 'Nicknames, snacks, moods + more' },
+        { title: 'Share the fan club', sub: 'Publish and pass the link around' },
+      ],
+      recap: [
+        { title: 'Start with their best photo', sub: 'The portrait is the heart of the page' },
+        { title: 'Make the lists theirs', sub: 'Nicknames, favorite snacks, funniest moment' },
+        { title: 'Open the fan club', sub: 'Publish and let people sign the notes' },
+      ],
+      foot: 'Fully customizable · Easy to edit · Yours forever',
+    },
+  };
+
+  async function renderTemplateDetail(key) {
+    const det = TPL_DETAILS[key];
+    if (!det) return navigate('/templates', true);
+    const app = document.getElementById('app');
+    const stepHtml = det.steps.map((st, i) => `
+      <div class="mp-td-step">
+        <span class="mp-td-step-badge${det.numbered ? ' mp-td-step-num' : ''}">${det.numbered ? i + 1 : st.icon}</span>
+        <div class="mp-td-step-txt"><b>${escapeHtml(st.title)}</b><span>${escapeHtml(st.sub)}</span></div>
+      </div>`).join('<span class="mp-td-arrow" aria-hidden="true">→</span>');
+    const recapHtml = det.recap.map((r) => `
+      <div class="mp-td-recap-row"><b>${escapeHtml(r.title)}</b><span>${escapeHtml(r.sub)}</span></div>`).join('');
+    app.innerHTML = header() + `
+      <main class="mp-home mp-has-nav mp-td" data-testid="template-detail">
+        <button class="mp-td-back" data-nav="/templates">← All templates</button>
+        <header class="mp-td-head">
+          ${det.wordmarkHtml}
+          <div class="mp-td-tagline">${escapeHtml(det.tagline)}</div>
+        </header>
+        <div class="mp-td-steps">${stepHtml}</div>
+        <div class="mp-td-browser">
+          <div class="mp-td-bbar">
+            <span class="mp-td-dot" style="background:#FF6B57"></span>
+            <span class="mp-td-dot" style="background:#FFE93F"></span>
+            <span class="mp-td-dot" style="background:#7FB542"></span>
+            <span class="mp-td-url">🔒 ${escapeHtml(det.address)}</span>
+          </div>
+          <div class="mp-td-hero" id="mp-td-hero"></div>
+        </div>
+        <div class="mp-td-recap">${recapHtml}</div>
+        <p class="mp-td-foot">${escapeHtml(det.foot)}</p>
+        <div class="mp-td-ctabar">
+          <button class="mp-btn mp-btn-accent mp-td-cta" id="mp-td-use" data-testid="use-template-cta">Use This Template ✨</button>
+        </div>
+      </main>` + bottomNav('templates');
+    wireShell(app);
+
+    const heroMount = document.getElementById('mp-td-hero');
+    if (det.hero) {
+      // The exact mockup artwork, committed as a static asset — never a
+      // live re-render of the starter doc.
+      const img = document.createElement('img');
+      img.src = det.hero;
+      img.alt = det.name + ' template';
+      img.draggable = false;
+      heroMount.appendChild(img);
+    }
+
+    let tplRow = null;
+    try {
+      const cat = await loadCatalog();
+      tplRow = (cat.templates || []).find((t) => t.key === key) || null;
+      if (!det.hero && heroMount && tplRow && tplRow.content) {
+        heroMount.appendChild(templatePreview(tplRow.content, { height: 430, maxScale: 0.62 }));
+      }
+    } catch { /* CTA falls back to the gallery */ }
+    const use = document.getElementById('mp-td-use');
+    if (use) use.addEventListener('click', () => {
+      if (tplRow && tplRow.content) openUseTemplate(tplRow);
+      else navigate('/templates');
+    });
+  }
+
   async function renderHome() {
     const app = document.getElementById('app');
     app.innerHTML = header() + `
@@ -439,7 +589,12 @@
         tag.className = 'mp-tpl-tile-tag';
         tag.textContent = t.tagline || t.description || '';
         tile.append(imgWrap, name, tag);
-        tile.addEventListener('click', () => openTemplateFullPreview(t));
+        // Flagship templates open their faithful detail page — never the
+        // live-rendered starter doc, which reads as a bait-and-switch.
+        tile.addEventListener('click', () => {
+          if (TPL_DETAILS[t.key]) navigate('/templates/' + t.key);
+          else openTemplateFullPreview(t);
+        });
         carousel.appendChild(tile);
       });
     } catch (err) {
@@ -558,8 +713,12 @@
       const card = document.createElement('div');
       card.className = 'mp-tpl-card';
       if (t.featured && i === 0) card.setAttribute('data-testid', 'featured-template');
+      const openDetail = () => {
+        if (TPL_DETAILS[t.key]) navigate('/templates/' + t.key);
+        else openTemplateFullPreview(t);
+      };
       const thumb = templatePreview(t.content, { height: 210, maxScale: 0.42 });
-      thumb.addEventListener('click', () => openTemplateFullPreview(t));
+      thumb.addEventListener('click', openDetail);
       card.appendChild(thumb);
       const body = document.createElement('div');
       body.className = 'mp-tpl-body';
@@ -578,7 +737,7 @@
       const peek = document.createElement('button');
       peek.className = 'mp-btn mp-btn-quiet mp-btn-sm';
       peek.textContent = 'Preview';
-      peek.addEventListener('click', () => openTemplateFullPreview(t));
+      peek.addEventListener('click', openDetail);
       acts.append(use, peek);
       body.append(name, desc, acts);
       card.appendChild(body);

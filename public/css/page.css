@@ -228,6 +228,15 @@
   font-family: 'Caveat', cursive; font-size: 19px; color: #5A6378;
   text-align: center; padding: 6px 4px 2px; min-height: 12px;
 }
+/* Die-cut white sticker outline — the Paper Room "clickable object" look.
+   Stacked drop-shadows approximate a cut vinyl border around any shape. */
+.mp-frame-sticker {
+  filter:
+    drop-shadow(2px 0 0 #FFFDF8) drop-shadow(-2px 0 0 #FFFDF8)
+    drop-shadow(0 2px 0 #FFFDF8) drop-shadow(0 -2px 0 #FFFDF8)
+    drop-shadow(2px 2px 0 #FFFDF8) drop-shadow(-2px -2px 0 #FFFDF8)
+    drop-shadow(0 3px 4px rgba(31,43,71,.22));
+}
 
 /* ----------------------------------------------------------- footer */
 .mp-footer {
