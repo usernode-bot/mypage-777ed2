@@ -549,6 +549,89 @@
       background: rgba(255,253,248,.92); color: #1F2B47; border-color: rgba(31,43,71,.18);
       box-shadow: 0 1px 4px rgba(0,0,0,.12);
     }
+
+    /* -------------------------------------------- template detail pages */
+    .mp-iconbtn:disabled { opacity: .32; cursor: default; }
+    .mp-td { max-width: 760px; margin: 0 auto; }
+    .mp-td-back { font-size: 13.5px; font-weight: 700; color: var(--accent-deep); padding: 8px 2px; }
+    .mp-td-head { text-align: center; padding: 4px 8px 14px; }
+    .mp-td-wordmark { margin: 0; line-height: 1.05; }
+    .mp-td-wm-serif { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 40px; letter-spacing: -.01em; }
+    .mp-td-wm-deco { font-size: .45em; vertical-align: super; margin: 0 8px; opacity: .8; }
+    .mp-td-wm-heart { color: var(--accent); }
+    .mp-td-wm-y2k {
+      font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 54px; letter-spacing: .02em;
+      background: linear-gradient(175deg, #F4F6FA 8%, #9BA5B8 45%, #E6EAF2 60%, #7C8598 92%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 1px 0 rgba(20,31,60,.25));
+    }
+    .mp-td-wm-sub { font-family: 'Caveat', cursive; font-size: 21px; margin-top: -4px; }
+    .mp-td-pill {
+      display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 700;
+      border: 1.5px solid var(--line); border-radius: 99px; padding: 3px 12px;
+      background: var(--surface); color: var(--ink-soft);
+    }
+    .mp-td-tagline {
+      display: inline-block; margin-top: 10px; font-family: 'Caveat', cursive; font-size: 20px;
+      border: 1.5px solid var(--ink); border-radius: 50% 45% 52% 48% / 62% 55% 60% 50%;
+      padding: 6px 20px; background: var(--surface);
+    }
+    .mp-td-steps {
+      display: flex; align-items: stretch; justify-content: center; gap: 8px;
+      flex-wrap: wrap; padding: 2px 4px 16px;
+    }
+    .mp-td-step {
+      display: flex; align-items: center; gap: 9px; text-align: left;
+      background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px;
+      padding: 9px 12px; flex: 1 1 190px; max-width: 240px;
+    }
+    .mp-td-step-badge {
+      display: grid; place-items: center; flex: none; width: 34px; height: 34px;
+      border-radius: 50%; background: var(--paper-deep); font-size: 17px;
+    }
+    .mp-td-step-num { font-weight: 800; font-size: 15px; background: var(--lavender); color: #141F3C; }
+    .mp-td-step-txt { display: flex; flex-direction: column; }
+    .mp-td-step-txt b { font-size: 13.5px; }
+    .mp-td-step-txt span { font-size: 12px; color: var(--ink-soft); }
+    .mp-td-arrow { align-self: center; color: var(--ink-soft); font-size: 15px; }
+    @media (max-width: 560px) { .mp-td-arrow { display: none; } }
+    .mp-td-browser {
+      border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden;
+      background: var(--surface); box-shadow: 0 2px 10px var(--shadow-card);
+    }
+    .mp-td-bbar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--paper-deep);
+    }
+    .mp-td-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .mp-td-url {
+      flex: 1; text-align: center; font-size: 12px; color: var(--ink-soft);
+      background: var(--surface); border-radius: 8px; padding: 3px 10px; margin: 0 10px;
+    }
+    .mp-td-hero img { width: 100%; display: block; }
+    .mp-td-hero .mp-tpl-thumb { height: 430px; }
+    .mp-td-recap { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 2px 4px; }
+    .mp-td-recap-row {
+      flex: 1 1 190px; display: flex; flex-direction: column; gap: 2px;
+      border: 1.5px dashed var(--line); border-radius: 14px; padding: 10px 12px;
+      background: var(--surface);
+    }
+    .mp-td-recap-row b { font-size: 13.5px; }
+    .mp-td-recap-row span { font-size: 12px; color: var(--ink-soft); }
+    .mp-td-foot { text-align: center; font-family: 'Caveat', cursive; font-size: 19px; margin: 12px 0 6px; }
+    .mp-td-ctabar {
+      position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 5;
+      padding: 6px 0 2px; text-align: center;
+    }
+    .mp-td-cta { width: min(420px, 100%); font-size: 15.5px; min-height: 48px; box-shadow: 0 4px 14px rgba(20,31,60,.18); }
+
+    /* ------------------------------------------------ scene prompt card */
+    .mp-scenebar {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--tint-warm); border: 1.5px solid var(--info-line);
+      border-radius: 14px; padding: 10px 12px; margin: 10px 12px 0;
+      font-size: 13.5px;
+    }
   </style>
 </head>
 <body>
@@ -560,6 +643,7 @@
   <script src="/js/song.js"></script>
   <script src="/js/draft.js"></script>
   <script src="/js/emoji.js"></script>
+  <script src="/js/scene.js"></script>
   <script src="/js/editor.js"></script>
   <script src="/js/app.js"></script>
 </body>

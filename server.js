@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
@@ -712,6 +713,7 @@ app.get('/make', (_req, res) => res.sendFile(INDEX_HTML));
 app.get('/directory', (_req, res) => res.sendFile(INDEX_HTML));
 app.get('/discover', (_req, res) => res.sendFile(INDEX_HTML));
 app.get('/templates', (_req, res) => res.sendFile(INDEX_HTML));
+app.get('/templates/:key', (_req, res) => res.sendFile(INDEX_HTML));
 app.get('/pages', (_req, res) => res.sendFile(INDEX_HTML));
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1053,6 +1055,52 @@ async function seedStaging() {
      ON CONFLICT (id) DO NOTHING`,
     [STAGING_GIFT_TOKEN]
   );
+
+  // Paper Room demo: a published page whose background is a transformed
+  // scene, so the sticker frames + doodle pack are URL-reachable for
+  // screenshots. The background asset is a committed sample image (a crop
+  // of the owner's Scene artwork) inserted as a staging-only assets row.
+  const DEMO_SCENE_ASSET_ID = 900101;
+  try {
+    const sceneBytes = fs.readFileSync(path.join(__dirname, 'public', 'img', 'demo-scene-bg.jpg'));
+    await pool.query(
+      `INSERT INTO assets (id, owner_user_id, kind, mime, bytes, size)
+       VALUES ($1, $2, 'image', 'image/jpeg', $3, $4) ON CONFLICT (id) DO NOTHING`,
+      [DEMO_SCENE_ASSET_ID, DEMO_USER_ID, sceneBytes, sceneBytes.length]
+    );
+    const paperRoomDoc = B.doc(
+      { type: 'preset', key: 'sparkle-wand' },
+      null,
+      { bg: '#5A4A38', color: '#F3E9DC' },
+      [
+        B.section('s1', { type: 'image', assetId: DEMO_SCENE_ASSET_ID, tile: false, color: '#F3EDDF' }, 680, [
+          B.framed(B.widget('pr-song', 4, 36, 52, -1, 5, { kind: 'song' }), 'window', 'Now Playing'),
+          B.framed(B.widget('pr-status', 50, 210, 46, 2, 5, { kind: 'status', title: 'status', emoji: '🪴', text: 'Staging demo — paper room scene' }), 'tape'),
+          B.framed(B.sticker('pr-d1', 5, 320, 10, -8, 6, 'doodle-star'), 'sticker'),
+          B.sticker('pr-d2', 85, 110, 9, 10, 6, 'doodle-sparkle'),
+          B.sticker('pr-d3', 7, 470, 18, -4, 6, 'doodle-clickme'),
+          B.sticker('pr-d4', 76, 420, 9, -12, 6, 'doodle-heart'),
+          B.framed(B.widget('pr-mood', 34, 540, 40, -1, 4, { kind: 'mood', mood: '😌', label: 'grateful + inspired' }), 'sticker'),
+        ]),
+      ]
+    );
+    await pool.query(
+      `INSERT INTO pages (id, slug, title, subject_type, subject_name, made_by_username, made_for_name, content, published, footer_style)
+       VALUES (900011, 'staging-scene-transformed', 'staging demo — paper room scene', 'self', $1, $1, NULL, $2, TRUE, $3)
+       ON CONFLICT (id) DO NOTHING`,
+      [DEMO_USERNAME, JSON.stringify(paperRoomDoc), JSON.stringify({ bg: '#5A4A38', color: '#F3E9DC' })]
+    );
+    await pool.query(
+      `INSERT INTO page_owners (page_id, user_id, username, role)
+       VALUES (900011, $1, $2, 'owner') ON CONFLICT DO NOTHING`,
+      [DEMO_USER_ID, DEMO_USERNAME]
+    );
+    await pool.query(
+      `INSERT INTO page_visits (page_id, total) VALUES (900011, 42) ON CONFLICT (page_id) DO NOTHING`
+    );
+  } catch (err) {
+    console.error('[seed] paper room demo failed:', err.message);
+  }
 }
 
 // Graceful shutdown (platform convention): stop accepting connections,

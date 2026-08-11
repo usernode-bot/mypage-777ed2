@@ -79,6 +79,16 @@
   let gesture = null;
   let previewing = false;   // 👁️ view-as-a-visitor mode
 
+  // Undo: a stack of design-state snapshots (title + doc, JSON strings).
+  // markDirty() is the single choke point every mutation already goes
+  // through, so pushing the previously-committed state there catches every
+  // design change; rapid bursts (slider scrubs) coalesce into one step.
+  let undoStack = [];
+  let lastCommitted = null;
+  let lastPushAt = 0;
+  const UNDO_CAP = 30;
+  const UNDO_COALESCE_MS = 900;
+
   const uid = (p) => p + '-' + Math.random().toString(36).slice(2, 8);
   const deep = (o) => JSON.parse(JSON.stringify(o));
 
@@ -113,6 +123,7 @@
         <button id="mp-back" class="mp-iconbtn" aria-label="Back">←</button>
         <button id="mp-title" class="mp-topbar-title"></button>
         <span id="mp-savestate" class="mp-savestate"></span>
+        <button id="mp-undo" class="mp-iconbtn" data-testid="undo-btn" aria-label="Undo" title="Undo" disabled>↶</button>
         <button id="mp-preview" class="mp-iconbtn" data-testid="preview-toggle" aria-label="Preview">👁️</button>
         <button id="mp-menu" class="mp-iconbtn" aria-label="Page menu">⋯</button>
         <button id="mp-publish" class="mp-btn mp-btn-accent mp-btn-sm">Publish</button>
@@ -145,6 +156,7 @@
       MPSong.stop();
       MP.navigate(isLocal ? '/make' : '/pages');
     });
+    document.getElementById('mp-undo').addEventListener('click', undo);
     document.getElementById('mp-preview').addEventListener('click', togglePreview);
     document.getElementById('mp-title').addEventListener('click', openRename);
     document.getElementById('mp-publish').addEventListener('click', openPublish);
@@ -198,6 +210,7 @@
       return;
     }
     doc = normalizeDoc(page.content);
+    resetUndo();
     refreshTopbar();
     renderBanner();
     renderCanvas();
@@ -263,6 +276,38 @@
         el.appendChild(b);
       }
     }
+    // Scene-page greeting: pages started from the Scene template get an
+    // "Upload your scene photo" card until the starter background is
+    // replaced (or the card is dismissed). Editor chrome, never content.
+    if (tplKey === 'scene-page') {
+      const sec0 = doc && doc.sections && doc.sections[0];
+      const starter = !!(sec0 && sec0.background && sec0.background.type !== 'image');
+      const sceneKey = 'mp_scene_prompt_' + (isLocal ? 'local' : page.id);
+      let sceneDone = false;
+      try { sceneDone = !!localStorage.getItem(sceneKey); } catch {}
+      if (starter && !sceneDone) {
+        const card = document.createElement('div');
+        card.className = 'mp-scenebar';
+        card.setAttribute('data-testid', 'scene-prompt');
+        const body = document.createElement('div');
+        body.style.flex = '1';
+        body.innerHTML = `<b>🏞️ Upload your scene photo</b><br><span class="mp-muted" style="font-size:12.5px;">Add a photo of a real place — we’ll turn it into your scene: paper textures, doodles, sticker objects.</span>`;
+        const go = document.createElement('button');
+        go.className = 'mp-btn mp-btn-accent mp-btn-sm';
+        go.textContent = 'Add my photo';
+        go.addEventListener('click', () => startSceneTransform(0));
+        const x = document.createElement('button');
+        x.className = 'mp-checklist-x';
+        x.setAttribute('aria-label', 'Dismiss scene prompt');
+        x.textContent = '✕';
+        x.addEventListener('click', () => {
+          try { localStorage.setItem(sceneKey, '1'); } catch {}
+          card.remove();
+        });
+        card.append(body, go, x);
+        el.appendChild(card);
+      }
+    }
   }
 
   function setSaveState(text) {
@@ -273,11 +318,83 @@
   // ---------------------------------------------------------------- saving
 
   function markDirty() {
+    pushUndoSnapshot();
+    scheduleSave();
+  }
+
+  function scheduleSave() {
     dirty = true;
     setSaveState('…');
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 900);
   }
+
+  // ------------------------------------------------------------------ undo
+
+  function snapState() {
+    return JSON.stringify({ title: page.title, doc });
+  }
+
+  function resetUndo() {
+    undoStack = [];
+    lastCommitted = page ? snapState() : null;
+    lastPushAt = 0;
+    refreshUndoButton();
+  }
+
+  // Called (via markDirty) AFTER each mutation: pushes the state as it was
+  // before this change. Mutations arriving within UNDO_COALESCE_MS of each
+  // other (a slider scrub, a color drag) collapse into one undo step — the
+  // step's start state was pushed by the burst's first event.
+  function pushUndoSnapshot() {
+    if (!page) return;
+    const cur = snapState();
+    if (lastCommitted === null) { lastCommitted = cur; return; }
+    if (cur === lastCommitted) return;
+    const now = Date.now();
+    if (now - lastPushAt > UNDO_COALESCE_MS) {
+      undoStack.push(lastCommitted);
+      if (undoStack.length > UNDO_CAP) undoStack.shift();
+    }
+    lastPushAt = now;
+    lastCommitted = cur;
+    refreshUndoButton();
+  }
+
+  function refreshUndoButton() {
+    const b = document.getElementById('mp-undo');
+    if (b) b.disabled = !undoStack.length;
+  }
+
+  function undo() {
+    if (!page || previewing || !undoStack.length) return;
+    let snap;
+    try { snap = JSON.parse(undoStack.pop()); } catch { refreshUndoButton(); return; }
+    page.title = snap.title;
+    doc = normalizeDoc(snap.doc);
+    lastCommitted = snapState();
+    lastPushAt = 0;
+    sel = null;
+    gesture = null;
+    refreshTopbar();
+    renderCanvas();
+    renderPanel();
+    refreshUndoButton();
+    scheduleSave(); // persist the reverted state without pushing a snapshot
+    MP.toast('undone ↶');
+  }
+
+  // Ctrl/Cmd+Z — desktop nicety. Registered once at module scope; a no-op
+  // unless the editor chrome is actually on screen and focus is not in a
+  // text field (where the browser's own undo should win).
+  document.addEventListener('keydown', (e) => {
+    if ((e.key !== 'z' && e.key !== 'Z') || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+    if (!document.getElementById('mp-undo')) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    e.preventDefault();
+    undo();
+  });
 
   async function save() {
     clearTimeout(saveTimer);
@@ -343,6 +460,8 @@
   function togglePreview() {
     previewing = !previewing;
     const btn = document.getElementById('mp-preview');
+    const undoBtn = document.getElementById('mp-undo');
+    if (undoBtn) undoBtn.style.visibility = previewing ? 'hidden' : '';
     document.body.classList.toggle('mp-previewing', previewing);
     if (previewing) {
       deselect();
@@ -704,6 +823,64 @@
       r.onerror = reject;
       r.readAsDataURL(blob);
     });
+  }
+
+  // ------------------------------------------------- Paper Room scene bg
+
+  // Photo → digital environment. Fully client-side (canvas + on-device
+  // person removal in scene.js); the platform has no image-capable AI, so
+  // nothing here calls the LLM proxy. One markDirty at the end = the whole
+  // transform is a single undo step.
+  function startSceneTransform(si) {
+    if (isLocal) { MP.toast('Photos need an account — publish first, then add them'); return; }
+    if (!window.MPScene) { MP.toast('Scene tools didn’t load — try again'); return; }
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p style="font-size:14px;">We’ll turn your photo into a scene — paper textures, hand-drawn doodles, and sticker-framed objects you can move around.</p>
+      <p class="mp-muted" style="font-size:12.5px;">If people are in the photo we tidy them out, so it’s about the space. Don’t like the result? Undo it from the top bar (↶).</p>`;
+    MP.openModal({
+      title: '✨ scene background',
+      contentEl: content,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Choose a photo', accent: true, onClick(ctl) { ctl.close(); pickSceneFile(si); } },
+      ],
+    });
+  }
+
+  function pickSceneFile(si) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/webp';
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const prog = document.createElement('div');
+      prog.innerHTML = `<p style="font-size:14.5px;text-align:center;padding:14px 0;">✨ recreating your scene…<br><span class="mp-muted" style="font-size:12.5px;">paper, ink, and stickers — a few seconds</span></p>`;
+      const ctl = MP.openModal({ title: 'Making your scene', contentEl: prog });
+      try {
+        const result = await MPScene.transform(file);
+        const b64 = await blobToBase64(result.blob);
+        const asset = await MP.api('/api/uploads', { method: 'POST', body: { kind: 'image', mime: 'image/jpeg', data: b64 } });
+        const section = doc.sections[si];
+        if (!section) throw new Error('That section is gone');
+        section.background = { type: 'image', assetId: asset.id, tile: false, color: '#F3EDDF' };
+        const maxZ = section.blocks.reduce((m, b) => Math.max(m, Number(b.z) || 1), 0);
+        MPScene.doodleBlocks(asset.id, uid).forEach((b, i) => {
+          b.z = maxZ + 1 + i;
+          section.blocks.push(b);
+        });
+        deselect();
+        markDirty();
+        renderCanvas();
+        ctl.close();
+        MP.toast(result.removedPeople ? '✨ scene ready — we tidied the people out' : '✨ scene ready — everything is movable');
+      } catch (err) {
+        ctl.close();
+        MP.toast(err.message || 'Couldn’t make the scene');
+      }
+    });
+    input.click();
   }
 
   // -------------------------------------------------------------- widgets
@@ -1263,7 +1440,7 @@
   function frameRow(block) {
     const row = document.createElement('div');
     row.className = 'mp-panel-row';
-    const FRAMES = [[null, 'no frame'], ['window', '🖥 window'], ['tape', '🩹 tape'], ['polaroid', '🖼 polaroid']];
+    const FRAMES = [[null, 'no frame'], ['window', '🖥 window'], ['tape', '🩹 tape'], ['polaroid', '🖼 polaroid'], ['sticker', '⬜ sticker']];
     FRAMES.forEach(([key, label]) => {
       const b = document.createElement('button');
       const on = (block.frame || null) === key;
@@ -1762,7 +1939,7 @@
             const d = document.createElement('p');
             d.className = 'mp-muted';
             d.style.fontSize = '13.5px';
-            d.textContent = 'This replaces your current sections, cursor and footer with the template (your title and song survive). There’s no undo.';
+            d.textContent = 'This replaces your current sections, cursor and footer with the template (your title and song survive). You can undo it from the top bar (↶).';
             return d;
           })(),
           actions: [
@@ -1907,7 +2084,7 @@
     const p = document.createElement('p');
     p.className = 'mp-muted';
     p.style.fontSize = '13.5px';
-    p.textContent = 'Delete this section and everything on it? There’s no undo.';
+    p.textContent = 'Delete this section and everything on it? You can undo it from the top bar (↶).';
     content.appendChild(p);
     MP.openModal({
       title: 'Delete section?',
@@ -1972,6 +2149,10 @@
     photoBg.className = 'mp-chip mp-chip-btn';
     photoBg.textContent = '🖼️ photo background';
     photoBg.addEventListener('click', () => { ctl.close(); pickImage(si, true); });
+    const sceneBg = document.createElement('button');
+    sceneBg.className = 'mp-chip mp-chip-btn';
+    sceneBg.textContent = '✨ scene background';
+    sceneBg.addEventListener('click', () => { ctl.close(); startSceneTransform(si); });
     const tileToggle = document.createElement('button');
     tileToggle.className = 'mp-chip mp-chip-btn';
     tileToggle.textContent = '🔁 tile it';
@@ -1984,7 +2165,7 @@
         MP.toast('Pick a photo background first');
       }
     });
-    row.append(custom, photoBg, tileToggle);
+    row.append(custom, photoBg, sceneBg, tileToggle);
     content.appendChild(row);
 
     const label3 = document.createElement('div');

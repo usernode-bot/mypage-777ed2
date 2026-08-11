@@ -19,6 +19,12 @@
     { "name": "Theme toggle renders", "path": "/", "expectSelector": "[data-testid=theme-toggle]" },
     { "name": "Dark chrome renders on home", "path": "/?theme=dark", "expectSelector": "html.dark [data-testid=home-hero]" },
     { "name": "Public page chrome honours dark", "path": "/p/staging-demo-corner?theme=dark", "expectSelector": "html.dark [data-testid=page-view]" },
-    { "name": "Editor chrome renders dark", "path": "/make?shot=editor&theme=dark", "expectSelector": "html.dark [data-testid=editor-canvas]" }
+    { "name": "Editor chrome renders dark", "path": "/make?shot=editor&theme=dark", "expectSelector": "html.dark [data-testid=editor-canvas]" },
+    { "name": "Template detail (Scene) shows exact artwork", "path": "/templates/scene-page", "expectSelector": "[data-testid=template-detail] .mp-td-hero img" },
+    { "name": "Template detail CTA renders", "path": "/templates/bestie-page", "expectSelector": "[data-testid=use-template-cta]" },
+    { "name": "Template detail (Y2K) renders", "path": "/templates/y2k-page", "expectSelector": "[data-testid=template-detail] .mp-td-hero img" },
+    { "name": "Editor undo button renders", "path": "/make?shot=editor", "expectSelector": "[data-testid=undo-btn]" },
+    { "name": "Paper Room demo page renders", "path": "/p/staging-scene-transformed", "expectSelector": "[data-testid=page-view]" },
+    { "name": "Sticker frames render publicly", "path": "/p/staging-scene-transformed", "expectSelector": ".mp-frame-sticker" }
   ]
 }

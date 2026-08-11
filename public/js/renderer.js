@@ -133,7 +133,7 @@
   // Optional block-level frame chrome. Strictly additive: docs without a
   // frame render byte-identically to before. Frame markup is app-generated;
   // the only user string (frameTitle) goes through textContent.
-  const FRAME_KINDS = ['window', 'tape', 'polaroid'];
+  const FRAME_KINDS = ['window', 'tape', 'polaroid', 'sticker'];
 
   function applyFrame(el, block) {
     const frame = typeof block.frame === 'string' && FRAME_KINDS.includes(block.frame) ? block.frame : null;
