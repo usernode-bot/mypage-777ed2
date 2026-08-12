@@ -534,6 +534,7 @@
         <h3 class="mp-h2">Start with a template</h3>
         <div id="mp-home-carousel" class="mp-carousel" data-testid="home-carousel"></div>
         <div id="mp-home-mine"></div>
+        <div id="mp-home-public"></div>
       </main>` + bottomNav('home');
     wireShell(app);
 
@@ -557,6 +558,28 @@
         }
       }).catch(() => {});
     }
+
+    // Public pages: a small taste of the directory, right below your own
+    // pages. Same cards as Discover; catalog first so previews have art.
+    Promise.all([
+      api('/api/public/directory'),
+      loadCatalog().catch(() => null),
+    ]).then(([{ pages }]) => {
+      const mount = document.getElementById('mp-home-public');
+      if (!mount || !pages.length) return;
+      const label = document.createElement('h3');
+      label.className = 'mp-h2';
+      label.textContent = 'Public pages';
+      const grid = document.createElement('div');
+      grid.className = 'mp-dir-grid';
+      grid.dataset.testid = 'home-public-pages';
+      pages.slice(0, 4).forEach((p) => grid.appendChild(directoryCard(p)));
+      const all = document.createElement('button');
+      all.className = 'mp-link-quiet';
+      all.textContent = 'Wander Discover →';
+      all.addEventListener('click', () => navigate('/directory'));
+      mount.append(label, grid, all);
+    }).catch(() => {});
 
     // Template carousel: image-first cards. Tapping one opens the real
     // template full-screen with its "Use template" action.
