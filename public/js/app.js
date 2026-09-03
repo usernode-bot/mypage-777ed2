@@ -76,6 +76,7 @@
       plus: svg('<path d="M12 5v14M5 12h14"/>'),
       discover: svg('<circle cx="12" cy="12" r="9"/><path d="m14.9 9.1-1.7 4.1-4.1 1.7 1.7-4.1z"/>'),
       pages: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.8 9.4a2.4 2.4 0 1 1 3.7 2c-.8.6-1.3 1-1.3 1.9"/><circle cx="12" cy="16.6" r=".8" fill="currentColor" stroke="none"/>'),
     };
   })();
 
@@ -326,6 +327,8 @@
       <header class="mp-home-header">
         <h1 class="mp-wordmark">MyPage</h1>
         <div class="mp-home-actions">
+          <button id="mp-help-btn" class="mp-helpbtn un-touch-target" data-testid="help-assistant-btn"
+            aria-label="Help assistant" title="Help assistant">${MPIcons.help}</button>
           ${themeButton()}
         </div>
       </header>`;
@@ -354,9 +357,50 @@
       el.addEventListener('click', (e) => { e.preventDefault(); navigate(el.dataset.nav); });
     });
     wireThemeButton(app);
+    wireHelpAssistantButton(app);
     const create = app.querySelector('#mp-nav-create');
     // Create opens the Templates gallery — its first card is "Start blank".
     if (create) create.addEventListener('click', () => navigate('/templates'));
+  }
+
+  function wireHelpAssistantButton(scope) {
+    const btn = (scope || document).querySelector('#mp-help-btn');
+    if (btn) btn.addEventListener('click', openHelpAssistant);
+  }
+
+  function openHelpAssistant() {
+    const tips = {
+      start: 'Start with Templates. Pick one, then tap Use template to open the editor.',
+      publish: 'In the editor, open Save and choose Publish. Your page gets a public /p/<slug> link.',
+      song: 'In the editor toolbar, open Song. Search, preview, then save it to your page.',
+      gift: 'Open My Pages, choose a page, then tap Gift. Share the claim link with your friend.',
+    };
+    const content = document.createElement('div');
+    content.className = 'mp-help-assistant';
+    content.innerHTML = `
+      <p class="mp-muted" style="margin:0 0 10px;">Hi, I am your MyPage helper. Pick a topic and I will point you to the right screen.</p>
+      <div class="mp-help-topics">
+        <button class="mp-chip mp-chip-btn" data-help-topic="start">How do I start?</button>
+        <button class="mp-chip mp-chip-btn" data-help-topic="publish">How do I publish?</button>
+        <button class="mp-chip mp-chip-btn" data-help-topic="song">How do I add a song?</button>
+        <button class="mp-chip mp-chip-btn" data-help-topic="gift">How do I gift a page?</button>
+      </div>
+      <p id="mp-help-answer" class="mp-help-answer">Tip: pick a question above.</p>`;
+
+    const ctl = openModal({
+      title: 'Help assistant',
+      contentEl: content,
+      actions: [{ label: 'Close' }],
+    });
+
+    const answer = content.querySelector('#mp-help-answer');
+    content.querySelectorAll('[data-help-topic]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-help-topic');
+        answer.textContent = tips[key] || 'Tip unavailable right now.';
+      });
+    });
+    return ctl;
   }
 
   // -------------------------------------------------------------------- home

@@ -295,7 +295,21 @@
       width: 38px; height: 38px; border-radius: 50%; font-size: 17px; line-height: 1;
       background: var(--surface); border: 1.5px solid var(--line); color: var(--ink);
     }
+    .mp-helpbtn {
+      display: inline-grid; place-items: center; flex: none;
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--surface); border: 1.5px solid var(--line); color: var(--ink);
+    }
+    .mp-helpbtn svg { width: 20px; height: 20px; display: block; }
+    .mp-helpbtn:active,
     .mp-themebtn:active { border-color: var(--accent); }
+    .mp-help-assistant { display: flex; flex-direction: column; gap: 10px; }
+    .mp-help-topics { display: flex; flex-wrap: wrap; gap: 7px; }
+    .mp-help-answer {
+      margin: 0; padding: 11px 12px;
+      background: var(--paper-deep); border: 1px solid var(--line); border-radius: 12px;
+      font-size: 13px; color: var(--ink);
+    }
     .mp-door-sub { font-size: 11px; color: var(--ink-soft); font-weight: 600; }
     .mp-home { max-width: 720px; margin: 0 auto; padding: 14px 18px calc(40px + env(safe-area-inset-bottom)); }
     .mp-make { max-width: 480px; margin: 0 auto; padding: calc(40px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom)); }
