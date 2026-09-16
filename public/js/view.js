@@ -242,7 +242,11 @@
       actions.append(mk('co-own it 🤝', 'co_own'), mk('take it over 🎨', 'take_over'));
     } else {
       const a = document.createElement('a');
-      a.href = 'https://social-vibecoding.usernodelabs.org/#app/mypage-777ed2/full';
+      // No platform hostname here (#2047): a top-level load of this path is
+      // redirected by server.js to wherever the platform lives
+      // (USERNODE_PLATFORM_ORIGIN).
+      a.href = '/open-in-usernode';
+      a.target = '_top';
       a.textContent = 'open in Usernode to claim';
       actions.appendChild(a);
     }
