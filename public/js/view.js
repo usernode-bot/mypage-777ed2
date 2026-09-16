@@ -242,7 +242,7 @@
       actions.append(mk('co-own it 🤝', 'co_own'), mk('take it over 🎨', 'take_over'));
     } else {
       const a = document.createElement('a');
-      a.href = 'https://social-vibecoding.usernodelabs.org/#app/mypage-777ed2/full';
+      a.href = `${window.__PLATFORM_ORIGIN__ || ''}/#app/mypage-777ed2/full`;
       a.textContent = 'open in Usernode to claim';
       actions.appendChild(a);
     }
