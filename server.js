@@ -6,10 +6,30 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const CATALOG = require('./lib/catalog');
 
-// The platform's address, injected by the platform at deploy (#2047). Never
-// written out here: a hardcoded hostname is what broke this app when the
-// platform moved domains. Empty only outside the platform (local runs).
-const PLATFORM_ORIGIN = (process.env.USERNODE_PLATFORM_ORIGIN || '').replace(/\/+$/, '');
+// Where the platform itself lives.
+//
+// The platform injects USERNODE_PLATFORM_ORIGIN into every app's environment,
+// derived from the domain that deployment actually runs on. Reading it is the
+// whole point: a platform hostname written into this repo is a hostname that
+// goes stale the next time the platform moves — which is exactly what happened,
+// and what left this app's asset tags and every "open in Usernode" link
+// pointing at a host that no longer answers. The literal below is only the
+// standalone-deploy fallback.
+//
+// Validated rather than trusted: the value is interpolated into markup, into
+// hrefs, into a redirect target and into a JS string, so anything that is not a
+// plain http(s) origin is discarded instead of being written out.
+const PLATFORM_ORIGIN_FALLBACK = 'https://my.onhomeroom.com';
+
+const PLATFORM_ORIGIN = (() => {
+  const raw = String(process.env.USERNODE_PLATFORM_ORIGIN || '').trim().replace(/\/+$/, '');
+  try {
+    const u = new URL(raw);
+    if ((u.protocol === 'https:' || u.protocol === 'http:') && u.origin === raw) return raw;
+  } catch (_) { /* unset or unparseable — fall through */ }
+  if (raw) console.warn('USERNODE_PLATFORM_ORIGIN is not a plain origin; ignoring it:', raw);
+  return PLATFORM_ORIGIN_FALLBACK;
+})();
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -707,21 +727,46 @@ app.get('/assets/:id', async (req, res) => {
   }
 });
 
-const VIEW_HTML = path.join(__dirname, 'public', 'view.html');
-const INDEX_HTML = path.join(__dirname, 'public', 'index.html');
+// Both documents carry the placeholder, so both are rendered once at boot
+// rather than per request. Read eagerly: an unreadable template should fail the
+// container immediately, not on the first visitor. These were file paths for
+// sendFile until the origin became a substitution — they are the documents
+// themselves now, so every route below sends rather than streams.
+function renderTemplate(file) {
+  return fs
+    .readFileSync(path.join(__dirname, 'public', file), 'utf8')
+    .split('__USERNODE_PLATFORM_ORIGIN__')
+    .join(PLATFORM_ORIGIN);
+}
 
-app.get('/p/:slug', (_req, res) => res.sendFile(VIEW_HTML));
-app.get('/claim/:token', (_req, res) => res.sendFile(VIEW_HTML));
+const VIEW_HTML = renderTemplate('view.html');
+const INDEX_HTML = renderTemplate('index.html');
+
+const sendDoc = (res, html) => res.type('html').send(html);
+
+app.get('/p/:slug', (_req, res) => sendDoc(res, VIEW_HTML));
+app.get('/claim/:token', (_req, res) => sendDoc(res, VIEW_HTML));
 // The account-less editor and the directory are public shells: their data
 // comes only from /api/public/* (or localStorage) until the user signs in.
-app.get('/make', (_req, res) => res.sendFile(INDEX_HTML));
-app.get('/directory', (_req, res) => res.sendFile(INDEX_HTML));
-app.get('/discover', (_req, res) => res.sendFile(INDEX_HTML));
-app.get('/templates', (_req, res) => res.sendFile(INDEX_HTML));
-app.get('/templates/:key', (_req, res) => res.sendFile(INDEX_HTML));
-app.get('/pages', (_req, res) => res.sendFile(INDEX_HTML));
+app.get('/make', (_req, res) => sendDoc(res, INDEX_HTML));
+app.get('/directory', (_req, res) => sendDoc(res, INDEX_HTML));
+app.get('/discover', (_req, res) => sendDoc(res, INDEX_HTML));
+app.get('/templates', (_req, res) => sendDoc(res, INDEX_HTML));
+app.get('/templates/:key', (_req, res) => sendDoc(res, INDEX_HTML));
+app.get('/pages', (_req, res) => sendDoc(res, INDEX_HTML));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// The static handler must never serve a file that renderTemplate owns, or it
+// hands out the unrendered template — placeholder text where the platform
+// origin should be, which is a broken page with broken asset tags. Two ways it
+// would: as the directory index for / (hence index: false), and by name for an
+// explicit /index.html and /view.html. So it skips those paths and they fall through to
+// the routes that render them.
+const TEMPLATED_DOCS = new Set(['/index.html', '/view.html']);
+const serveStatic = express.static(path.join(__dirname, 'public'), { index: false });
+
+app.use((req, res, next) => (
+  TEMPLATED_DOCS.has(req.path) ? next() : serveStatic(req, res, next)
+));
 
 // HTML shell: serve the app if authenticated. Unauthenticated top-level
 // visits (share links pasted into a browser — Sec-Fetch-Dest: document)
@@ -734,7 +779,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => {
   if (!req.user) {
     if (req.get('sec-fetch-dest') === 'document') {
-      return res.redirect(302, (PLATFORM_ORIGIN + '/#app/mypage-777ed2/full'));
+      return res.redirect(302, `${PLATFORM_ORIGIN}/#app/mypage-777ed2/full`);
     }
     return res.status(401).send(`<!doctype html><meta charset=utf-8><title>Open in Usernode</title>
 <body style="font-family:system-ui;background:#09090b;color:#e4e4e7;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
@@ -745,7 +790,7 @@ app.get('*', (req, res) => {
   </div>
 </body>`);
   }
-  res.sendFile(INDEX_HTML);
+  sendDoc(res, INDEX_HTML);
 });
 
 // ---------------------------------------------------------------------------

@@ -101,6 +101,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=Inter:wght@400;500;600;700;800&family=Comic+Neue:wght@400;700&family=Caveat:wght@500;700&family=Special+Elite&family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/usernode-native/v1/native.css">
   <script src="/usernode-native/v1/native.js"></script>
+  <!-- usernode-bridge — centrally hosted, never vendored. Not optional and not
+       conditional on calling a bridge API: it is how this app ANSWERS the shell,
+       so without it the frame is invisible to anything that asks it a question.
+       It is also what publishes --un-kb-inset and html.un-kb inside the frame,
+       which is how bottom-anchored UI clears the on-screen keyboard. -->
+  <script src="/usernode-bridge/v1/bridge.js"></script>
   <link rel="stylesheet" href="/css/page.css">
   <style>
     /* Brand: baby-blue paper, white cards, deep navy ink, neon pops (pink /
@@ -636,6 +642,11 @@
 </head>
 <body>
   <div id="app"></div>
+  <!-- Client scripts read the platform origin from here rather than
+       hardcoding one: this document is rendered at boot from
+       USERNODE_PLATFORM_ORIGIN, so a domain move reaches them without
+       another release. -->
+  <script>window.__PLATFORM_ORIGIN__ = "__USERNODE_PLATFORM_ORIGIN__";</script>
   <script src="/js/theme.js"></script>
   <script src="/js/renderer.js"></script>
   <script src="/js/widgets.js"></script>

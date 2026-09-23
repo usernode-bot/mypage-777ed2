@@ -5,7 +5,7 @@ editing this repo, read the platform conventions before making
 changes:
 
 **Platform conventions (authoritative, always current):**
-https://social-vibecoding.usernodelabs.org/claude.md
+https://my.onhomeroom.com/claude.md
 
 Fetch that URL at the start of each session — it's the single source
 of truth for platform-wide behavior (auth model, `USERNODE_ENV`,

@@ -98,6 +98,11 @@
 </head>
 <body>
   <div id="page"><div class="v-state"><h1>✨</h1><p>opening the page…</p></div></div>
+  <!-- Client scripts read the platform origin from here rather than
+       hardcoding one: this document is rendered at boot from
+       USERNODE_PLATFORM_ORIGIN, so a domain move reaches them without
+       another release. -->
+  <script>window.__PLATFORM_ORIGIN__ = "__USERNODE_PLATFORM_ORIGIN__";</script>
   <script src="/js/theme.js"></script>
   <script src="/js/renderer.js"></script>
   <script src="/js/widgets.js"></script>
