@@ -1,6 +1,6 @@
 {
   "name": "MyPage",
-  "icon": { "emoji": "✨" },
+  "icon": { "image": "brand/icon.png", "emoji": "✨" },
   "secrets": [],
   "tests": [
     { "name": "Home hero renders", "path": "/", "expectSelector": "[data-testid=home-hero]" },
