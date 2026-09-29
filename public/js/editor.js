@@ -696,7 +696,7 @@
     let ctl;
     const doors = [
       ['📝', 'text', () => insertBlock(si, { id: uid('b'), type: 'text', x: 8, y: 40, w: 66, rotation: 0, props: { text: 'write something…', font: 'inter', size: 22, color: '#1F2B47', bold: false, align: 'left', style: 'none' } }, true)],
-      ['🖼️', 'photo', () => pickImage(si)],
+      ['🖼️', 'photo', () => pickImage(si, false, (openPicker) => openPicker())],
       ['🏷️', 'sticker', () => openStickerPicker(si)],
       ['🧩', 'widget', () => openWidgetPicker(si)],
     ];
@@ -769,7 +769,7 @@
 
   // --------------------------------------------------------------- images
 
-  function pickImage(si, forBackground) {
+  function pickImage(si, forBackground, onOpen) {
     if (isLocal) { MP.toast('Photos need an account — publish first, then add them'); return; }
     const input = document.createElement('input');
     input.type = 'file';
@@ -792,7 +792,8 @@
         MP.toast(err.message);
       }
     });
-    input.click();
+    if (typeof onOpen === 'function') onOpen(() => requestAnimationFrame(() => input.click()));
+    else input.click();
   }
 
   // Client-side resize to ≤1600px before upload (GIFs go raw to keep the
