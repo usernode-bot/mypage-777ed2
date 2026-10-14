@@ -159,29 +159,37 @@
 
   // ------------------------------------------------------ template previews
 
-  // Accurate miniature: the template's REAL doc rendered through the shared
-  // PageRenderer at page width (720px), then scaled to fit the card. Never
-  // an illustration or a placeholder.
+  // Real-size preview: the template's REAL doc rendered through the shared
+  // PageRenderer at the card's own width — the same column the live page
+  // uses on that device — so what you pick is what you get. Never an
+  // illustration or a placeholder. opts.miniature keeps the old behaviour:
+  // render at 720px and scale to fit, for cards far narrower than any
+  // screen (directory cards).
   function templatePreview(content, opts = {}) {
     const thumb = document.createElement('div');
     thumb.className = 'mp-tpl-thumb';
     if (opts.height) thumb.style.height = opts.height + 'px';
     const scaler = document.createElement('div');
-    scaler.className = 'mp-tpl-scaler';
+    scaler.className = 'mp-tpl-scaler' + (opts.miniature ? ' mp-tpl-scaler-mini' : '');
     thumb.appendChild(scaler);
     try {
       window.PageRenderer.render(content, scaler, { editing: true, visits: 128 });
     } catch { /* a malformed doc must never break the gallery */ }
-    // Scale two frames later: the renderer refits section heights on the
-    // next frame, and measuring after that keeps the mini layout faithful.
-    // maxScale keeps wide cards honest miniatures (centered when capped)
-    // instead of near-1:1 crops.
+    // Refit two frames later: the first fit inside render runs before the
+    // thumb is in the DOM, so measure section heights at the real width
+    // once it is. Miniatures scale instead (maxScale keeps wide cards
+    // honest miniatures, centered when capped).
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const w = thumb.clientWidth;
       if (!w) return;
-      const k = Math.min(w / 720, opts.maxScale || 1);
-      scaler.style.transform = 'scale(' + k + ')';
-      scaler.style.left = Math.max(0, (w - 720 * k) / 2) + 'px';
+      if (opts.miniature) {
+        const k = Math.min(w / 720, opts.maxScale || 1);
+        scaler.style.transform = 'scale(' + k + ')';
+        scaler.style.left = Math.max(0, (w - 720 * k) / 2) + 'px';
+      } else {
+        try { window.PageRenderer.fitSections(scaler); }
+        catch { /* a malformed doc must never break the gallery */ }
+      }
     }));
     return thumb;
   }
@@ -509,7 +517,7 @@
       const cat = await loadCatalog();
       tplRow = (cat.templates || []).find((t) => t.key === key) || null;
       if (!det.hero && heroMount && tplRow && tplRow.content) {
-        heroMount.appendChild(templatePreview(tplRow.content, { height: 430, maxScale: 0.62 }));
+        heroMount.appendChild(templatePreview(tplRow.content, { height: 430 }));
       }
     } catch { /* CTA falls back to the gallery */ }
     const use = document.getElementById('mp-td-use');
@@ -740,7 +748,7 @@
         if (TPL_DETAILS[t.key]) navigate('/templates/' + t.key);
         else openTemplateFullPreview(t);
       };
-      const thumb = templatePreview(t.content, { height: 210, maxScale: 0.42 });
+      const thumb = templatePreview(t.content, { height: 210 });
       thumb.addEventListener('click', openDetail);
       card.appendChild(thumb);
       const body = document.createElement('div');
@@ -1041,7 +1049,7 @@
     // scaled, through the shared renderer. Falls back to bg + text peek.
     const fs = p.first_section;
     if (fs && Array.isArray(fs.blocks) && fs.blocks.length) {
-      a.appendChild(templatePreview({ version: 1, sections: [fs] }, { height: 110 }));
+      a.appendChild(templatePreview({ version: 1, sections: [fs] }, { height: 110, miniature: true }));
     } else {
       const preview = document.createElement('div');
       preview.className = 'mp-dir-preview';
