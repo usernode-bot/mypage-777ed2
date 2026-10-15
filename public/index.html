@@ -240,10 +240,13 @@
     .mp-h2 { font-size: 17px; font-weight: 700; margin: 22px 2px 10px; letter-spacing: -.01em; }
 
     /* --------------------------------------------- template previews */
-    /* An accurate miniature: the template's real doc rendered at page width
-       (720px) inside a clipped card, scaled down with transform. */
+    /* Real-size preview: the template's real doc rendered at the card's own
+       width — the same column the live page uses — inside a clipped card.
+       .mp-tpl-scaler-mini keeps the 720px-and-scale miniature for cards far
+       narrower than any screen (directory cards). */
     .mp-tpl-thumb { position: relative; overflow: hidden; background: var(--paper-deep); pointer-events: none; }
-    .mp-tpl-scaler { position: absolute; top: 0; left: 0; width: 720px; transform-origin: top left; }
+    .mp-tpl-scaler { position: absolute; top: 0; left: 0; width: 100%; }
+    .mp-tpl-scaler-mini { width: 720px; transform-origin: top left; }
     /* Home template carousel — content cards, Netflix/Pinterest style:
        one rounded image (~75–80% of the tile), concise text underneath,
        no card box around the whole thing. */
