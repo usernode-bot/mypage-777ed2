@@ -65,6 +65,9 @@
     /* Full-bleed: section backgrounds span the whole window; blocks stay
        in the renderer's centered .mp-section-content column. */
     #page { min-height: 100vh; }
+    /* Each section is its own stacking context, so a block's z-index (up
+       to 200) can't paint over the claim bar (60) or the report modal (80). */
+    #page .mp-section { z-index: 0; }
     .v-state { max-width: 420px; margin: 18vh auto 0; text-align: center; padding: 24px; color: var(--ink-soft); }
     .v-state h1 { font-family: 'Fraunces', Georgia, serif; color: var(--ink); font-size: 22px; }
     .v-state a { color: var(--accent-deep); font-weight: 700; }
@@ -84,6 +87,12 @@
     .v-claim-actions button, .v-claim-actions a {
       background: #fff; color: #B03A7C; border: none; cursor: pointer; text-decoration: none;
       font-weight: 800; font-size: 13px; border-radius: 99px; padding: 8px 16px; font-family: inherit;
+    }
+    /* On phones the sticky claim bar wraps tall and covers the page while
+       scrolling — let it sit at the top and scroll away instead. (Kept after
+       the .v-claimbar rules so it wins the tie on specificity.) */
+    @media (max-width: 480px) {
+      .v-claimbar { position: relative; }
     }
     .v-modal-back { position: fixed; inset: 0; background: var(--scrim); z-index: 80; display: grid; place-items: center; padding: 18px; }
     .v-modal { background: var(--surface-raised); color: var(--ink); border-radius: 16px; padding: 20px; width: 100%; max-width: 380px; }

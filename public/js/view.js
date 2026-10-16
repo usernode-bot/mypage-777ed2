@@ -150,6 +150,7 @@
 
     const ctx = {
       visits,
+      reflow: true,
       footer: true,
       footerStyle: page.footer_style,
       onReport: () => openReport(page.slug),
@@ -163,6 +164,20 @@
     };
     PageRenderer.render(page.content, canvas, ctx);
     MPCursor.apply(page.content && page.content.cursor, document.body);
+
+    // Phone-width reflow: block tops that were pushed apart can change again
+    // when fonts land, images lazy-load, or the window changes. Refit on
+    // those signals — fitSection is a no-op at desktop widths.
+    let refitTimer = null;
+    const refit = () => PageRenderer.fitSections(canvas);
+    const scheduleRefit = () => {
+      clearTimeout(refitTimer);
+      refitTimer = setTimeout(refit, 150);
+    };
+    window.addEventListener('resize', scheduleRefit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+    // Capture phase: img load events don't bubble.
+    canvas.addEventListener('load', scheduleRefit, true);
 
     // Autoplay the page's song where the browser allows it; MPSong falls
     // back to the visitor's first gesture when the policy blocks it.

@@ -55,6 +55,7 @@
   display: block; text-align: center; text-decoration: none;
   background: #1F2B47; color: #FAF6EE; font-weight: 700; font-size: 14px;
   border-radius: 99px; padding: 10px 14px;
+  overflow-wrap: break-word; word-wrap: break-word;
 }
 .mpw-link-btn:active { transform: scale(.98); }
 
