@@ -91,8 +91,12 @@
   }
 
   function applyBlockGeometry(el, block) {
+    const top = clamp(block.y, 0, 8000, 20);
     el.style.left = clamp(block.x, -20, 110, 4) + '%';
-    el.style.top = clamp(block.y, 0, 8000, 20) + 'px';
+    el.style.top = top + 'px';
+    // Authored top, kept so reflowBlocks can always recompute from the doc
+    // (shifts never accumulate across resize refits).
+    el.dataset.y = String(top);
     el.style.width = clamp(block.w, 4, 120, 60) + '%';
     el.style.zIndex = String(Math.round(clamp(block.z, 1, 200, 1)));
     el.style.transform = `rotate(${clamp(block.rotation, -180, 180, 0)}deg)`;
@@ -236,11 +240,78 @@
     return secEl.querySelector(':scope > .mp-section-content') || secEl;
   }
 
+  // Reference width for the authored layout: the .mp-section-content
+  // max-width in page.css — the editor canvas lays pages out at this width.
+  const REFERENCE_W = 720;
+
+  // On phone-width columns the authored px tops stop lining up: narrower
+  // blocks wrap taller and run into the block below (a heading over the
+  // link buttons). reflowBlocks moves each block down just far enough to
+  // stay clear (gap up to 12px), while intentional overlaps — a sticker on
+  // a card — move together with what they sit on. Only top is written, from
+  // the authored y each time; nothing is persisted and the doc is untouched.
+  function reflowBlocks(inner) {
+    const blocks = [];
+    for (const b of inner.children) {
+      if (b.classList && b.classList.contains('mp-block') && b.dataset.y !== undefined) blocks.push(b);
+    }
+    if (!blocks.length) return;
+    // At (or above) the reference width the authored layout already fits.
+    if (inner.clientWidth >= REFERENCE_W - 1) {
+      blocks.forEach((b) => { b.style.top = b.dataset.y + 'px'; });
+      return;
+    }
+    // Start every block from its authored top, then measure reference boxes
+    // at the reference width. offset* boxes ignore rotation on purpose,
+    // which keeps the result stable across refits.
+    blocks.forEach((b) => { b.style.top = b.dataset.y + 'px'; });
+    inner.style.width = REFERENCE_W + 'px';
+    const ref = blocks.map((b, i) => ({
+      el: b,
+      i,
+      left: b.offsetLeft,
+      right: b.offsetLeft + b.offsetWidth,
+      refTop: b.offsetTop,
+      refBottom: b.offsetTop + b.offsetHeight,
+    }));
+    inner.style.width = '';
+    // Current heights at the real (narrow) width — these are what can grow.
+    ref.forEach((r) => { r.h = r.el.offsetHeight; });
+
+    // Walk blocks in reference-top order (ties in DOM order). Each block
+    // clears against every earlier block it overlaps horizontally.
+    const order = ref.slice().sort((a, b) => a.refTop - b.refTop || a.i - b.i);
+    const newTop = new Map();
+    order.forEach((b, bi) => {
+      let top = b.refTop;
+      for (let ai = 0; ai < bi; ai++) {
+        const a = order[ai];
+        const aNew = newTop.get(a);
+        if (!(a.left < b.right - 1 && b.left < a.right - 1)) continue;
+        if (a.refBottom <= b.refTop) {
+          // A was clear above B in the reference layout: keep it clear now,
+          // pushing down only as far as needed, gap capped at 12px.
+          const gap = Math.min(b.refTop - a.refBottom, 12);
+          top = Math.max(top, aNew + a.h + gap);
+        } else {
+          // Intentional overlap: B moves with A, keeping their offset.
+          top = Math.max(top, b.refTop + (aNew - a.refTop));
+        }
+      }
+      newTop.set(b, top);
+    });
+    order.forEach((b) => {
+      const t = newTop.get(b);
+      if (t !== b.refTop) b.el.style.top = t + 'px';
+    });
+  }
+
   // Absolute-positioned blocks don't grow their section, so after layout
   // settles we size each section to max(minHeight, deepest block bottom).
   // Height is set on the content column; the full-bleed wrapper follows.
   function fitSection(secEl) {
     const inner = sectionContent(secEl);
+    if (secEl.dataset && secEl.dataset.reflow) reflowBlocks(inner);
     const rect = inner.getBoundingClientRect();
     let need = 0;
     inner.querySelectorAll(':scope > .mp-block').forEach((b) => {
@@ -299,6 +370,9 @@
       sec.dataset.sectionId = String(section.id || '');
       sec.dataset.si = String(si);
       sec.dataset.minHeight = String(clamp(section.minHeight, 120, 3000, 320));
+      // Phone-width collision reflow is a viewer-only behaviour; the editor
+      // never sets ctx.reflow, so dragged positions are never touched.
+      if (ctx && ctx.reflow) sec.dataset.reflow = '1';
       applyBg(sec, section.background);
       // Full-bleed background, blocks in a centered mobile-width column.
       const inner = document.createElement('div');
