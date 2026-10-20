@@ -2022,6 +2022,18 @@
 
     const list = document.createElement('div');
     content.appendChild(list);
+    // Same order the server sends: waiting notes, then pinned, then the rest.
+    function sortEntries() {
+      data.entries.sort((a, b) => {
+        const pa = a.status === 'pending' ? 0 : 1;
+        const pb = b.status === 'pending' ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        const qa = a.pinned ? 0 : 1;
+        const qb = b.pinned ? 0 : 1;
+        if (qa !== qb) return qa - qb;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+    }
     function renderEntries() {
       list.textContent = '';
       if (!data.entries.length) {
@@ -2052,10 +2064,28 @@
             try {
               await MP.api(`/api/pages/${page.id}/guestbook/${entry.id}/approve`, { method: 'POST', body: {} });
               entry.status = 'approved';
+              entry.pinned = false;
+              sortEntries();
               renderEntries();
             } catch (err) { MP.toast(err.message); }
           });
           acts.appendChild(ok);
+        } else {
+          const pin = document.createElement('button');
+          pin.className = 'mp-chip mp-chip-btn' + (entry.pinned ? ' mp-chip-on' : '');
+          pin.textContent = entry.pinned ? '📌 unpin' : '📌 pin';
+          pin.addEventListener('click', async () => {
+            try {
+              const res = await MP.api(`/api/pages/${page.id}/guestbook/${entry.id}/pin`, {
+                method: 'POST',
+                body: { pinned: !entry.pinned },
+              });
+              entry.pinned = !!res.pinned;
+              sortEntries();
+              renderEntries();
+            } catch (err) { MP.toast(err.message); }
+          });
+          acts.appendChild(pin);
         }
         const del = document.createElement('button');
         del.className = 'mp-chip mp-chip-btn mp-chip-danger';

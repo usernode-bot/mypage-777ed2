@@ -410,18 +410,30 @@
           wait.className = 'mpw-gb-wait';
           wait.textContent = 'awaiting approval';
           row.appendChild(wait);
-        } else if (gb.onReportEntry) {
-          const rep = document.createElement('button');
-          rep.className = 'mpw-gb-report';
-          rep.textContent = 'report';
-          rep.addEventListener('click', () => gb.onReportEntry(entry));
-          row.appendChild(rep);
+        } else {
+          if (entry.pinned) {
+            const pin = document.createElement('span');
+            pin.className = 'mpw-gb-pinned';
+            pin.textContent = '📌 pinned';
+            row.appendChild(pin);
+          }
+          if (gb.onReportEntry) {
+            const rep = document.createElement('button');
+            rep.className = 'mpw-gb-report';
+            rep.textContent = 'report';
+            rep.addEventListener('click', () => gb.onReportEntry(entry));
+            row.appendChild(rep);
+          }
         }
         row.appendChild(body);
         return row;
       }
 
-      (gb.entries || []).slice(0, 30).forEach((entry) => entriesBox.appendChild(entryRow(entry)));
+      (gb.entries || []).slice(0, 30).forEach((entry) => {
+        const row = entryRow(entry);
+        if (entry.pinned) row.classList.add('mpw-gb-entry-pinned');
+        entriesBox.appendChild(row);
+      });
       let emptyNote = null;
       if (!(gb.entries || []).length) {
         emptyNote = document.createElement('div');
@@ -431,7 +443,12 @@
       }
       function prependEntry(entry, pending) {
         if (emptyNote) { emptyNote.remove(); emptyNote = null; }
-        entriesBox.prepend(entryRow(entry, pending));
+        const row = entryRow(entry, pending);
+        if (entry && entry.pinned) row.classList.add('mpw-gb-entry-pinned');
+        // A fresh note sits just below any pinned ones, where it will stay after a reload.
+        const pinnedRows = entriesBox.querySelectorAll('.mpw-gb-entry-pinned');
+        if (pinnedRows.length) pinnedRows[pinnedRows.length - 1].after(row);
+        else entriesBox.prepend(row);
       }
       if (gb.closed) {
         const closed = document.createElement('div');

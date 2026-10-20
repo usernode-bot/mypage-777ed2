@@ -203,8 +203,9 @@ const publicPageColumns = `p.id, p.slug, p.title, p.subject_type, p.subject_name
 async function publicPagePayload(pageRow) {
   const [{ rows: gb }, { rows: v }] = await Promise.all([
     pool.query(
-      `SELECT id, author_name, body, created_at FROM guestbook_entries
-       WHERE page_id = $1 AND status = 'approved' ORDER BY created_at DESC LIMIT 100`,
+      `SELECT id, author_name, body, pinned, created_at FROM guestbook_entries
+       WHERE page_id = $1 AND status = 'approved'
+       ORDER BY pinned DESC, created_at DESC LIMIT 100`,
       [pageRow.id]
     ),
     pool.query(`SELECT total FROM page_visits WHERE page_id = $1`, [pageRow.id]),
@@ -615,8 +616,8 @@ app.get('/api/pages/:id/guestbook', async (req, res) => {
     const page = await loadOwnedPage(req, res);
     if (!page) return;
     const { rows } = await pool.query(
-      `SELECT id, author_name, body, status, created_at FROM guestbook_entries
-       WHERE page_id = $1 ORDER BY (status = 'pending') DESC, created_at DESC LIMIT 300`,
+      `SELECT id, author_name, body, status, pinned, created_at FROM guestbook_entries
+       WHERE page_id = $1 ORDER BY (status = 'pending') DESC, pinned DESC, created_at DESC LIMIT 300`,
       [page.id]
     );
     res.json({ entries: rows, guestbook_closed: page.guestbook_closed });
@@ -634,6 +635,22 @@ app.post('/api/pages/:id/guestbook/:entryId/approve', async (req, res) => {
       [parseInt(req.params.entryId, 10) || 0, page.id]
     );
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/pages/:id/guestbook/:entryId/pin', async (req, res) => {
+  try {
+    const page = await loadOwnedPage(req, res);
+    if (!page) return;
+    const { rows } = await pool.query(
+      `UPDATE guestbook_entries SET pinned = $1
+       WHERE id = $2 AND page_id = $3 AND status = 'approved' RETURNING pinned`,
+      [!!req.body.pinned, parseInt(req.params.entryId, 10) || 0, page.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Note not found' });
+    res.json({ ok: true, pinned: rows[0].pinned });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -835,6 +852,7 @@ async function migrate() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_guestbook_page ON guestbook_entries(page_id, status);
+    ALTER TABLE guestbook_entries ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS page_visits (
       page_id INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
